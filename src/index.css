@@ -1,0 +1,323 @@
+@import "tailwindcss";
+@import "./tw-animate.css";
+
+/* hidden scrollbars — per the original Flowstep export */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: 0;
+  padding: 0;
+  margin: 0;
+  background: #0b0b0f;
+}
+
+::selection {
+  background: rgba(139, 92, 246, 0.4);
+}
+
+/* crafted microstates — keyboard users get the same signal as pointers */
+:where(button, [role="button"], a, input, textarea, select):focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.55);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+:where(button, [role="button"]) {
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+/* Linear-style top-edge highlight: dark panels read as physically lit */
+.edge {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root {
+  font-family:
+    "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* respect users who turn motion off */
+@media (prefers-reduced-motion: reduce) {
+  .page-enter,
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* page transition */
+@keyframes rollout-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.page-enter {
+  animation: rollout-fadein 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Design contract (PROMPT.md): violet #8B5CF6 is a SIGNAL — flat, only on
+   primary actions. No gradients, no glow. Color is a signal, not decoration. */
+.btn-glow {
+  background: #8b5cf6;
+}
+.btn-glow:hover {
+  background: #7c4dec;
+}
+
+/* surface card — flat per the original export */
+.glass {
+  background: #15151c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* flat app background — #0B0B0F everywhere, no ambient gradients */
+.app-bg {
+  background: #0b0b0f;
+}
+
+.font-sans {
+  font-family:
+    "Inter", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+.font-mono {
+  font-family:
+    "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+.font-serif {
+  font-family:
+    "Source Serif 4", "Inter", ui-serif, Georgia, Cambria, "Times New Roman",
+    Times, serif;
+}
+
+@theme inline {
+  --radius: 0.625rem;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+.bg-background {
+  background: var(--color-background);
+}
+.bg-foreground {
+  background: var(--color-foreground);
+}
+.bg-card {
+  background: var(--color-card);
+}
+.bg-card-foreground {
+  background: var(--color-card-foreground);
+}
+.bg-popover {
+  background: var(--color-popover);
+}
+.bg-popover-foreground {
+  background: var(--color-popover-foreground);
+}
+.bg-primary {
+  background: var(--color-primary);
+}
+.bg-primary-foreground {
+  background: var(--color-primary-foreground);
+}
+.bg-secondary {
+  background: var(--color-secondary);
+}
+.bg-secondary-foreground {
+  background: var(--color-secondary-foreground);
+}
+.bg-muted {
+  background: var(--color-muted);
+}
+.bg-muted-foreground {
+  background: var(--color-muted-foreground);
+}
+.bg-accent {
+  background: var(--color-accent);
+}
+.bg-accent-foreground {
+  background: var(--color-accent-foreground);
+}
+.bg-destructive {
+  background: var(--color-destructive);
+}
+.bg-border {
+  background: var(--color-border);
+}
+.bg-input {
+  background: var(--color-input);
+}
+.bg-ring {
+  background: var(--color-ring);
+}
+
+.text-card {
+  color: var(--color-card);
+}
+.text-card-foreground {
+  color: var(--color-card-foreground);
+}
+.text-popover {
+  color: var(--color-popover);
+}
+.text-popover-foreground {
+  color: var(--color-popover-foreground);
+}
+.text-primary {
+  color: var(--color-primary);
+}
+.text-primary-foreground {
+  color: var(--color-primary-foreground);
+}
+.text-secondary {
+  color: var(--color-secondary);
+}
+.text-secondary-foreground {
+  color: var(--color-secondary-foreground);
+}
+.text-muted {
+  color: var(--color-muted);
+}
+.text-muted-foreground {
+  color: var(--color-muted-foreground);
+}
+.text-accent {
+  color: var(--color-accent);
+}
+.text-accent-foreground {
+  color: var(--color-accent-foreground);
+}
+.text-destructive {
+  color: var(--color-destructive);
+}
+.text-border {
+  color: var(--color-border);
+}
+.text-input {
+  color: var(--color-input);
+}
+.text-ring {
+  color: var(--color-ring);
+}
+.border {
+  border-color: var(--color-border);
+}
+.border-border {
+  border-color: var(--color-border);
+}
+.border-primary {
+  border-color: var(--color-primary);
+}
+.border-secondary {
+  border-color: var(--color-secondary);
+}
+.border-muted {
+  border-color: var(--color-muted);
+}
+.border-accent {
+  border-color: var(--color-accent);
+}
+.border-destructive {
+  border-color: var(--color-destructive);
+}
+.border-input {
+  border-color: var(--color-input);
+}
+.border-ring {
+  border-color: var(--color-border);
+}
+.border-t {
+  border-color: var(--color-border);
+}
+.border-b {
+  border-color: var(--color-border);
+}
+.border-l {
+  border-color: var(--color-border);
+}
+.border-r {
+  border-color: var(--color-border);
+}
