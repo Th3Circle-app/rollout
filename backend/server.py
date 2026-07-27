@@ -18,7 +18,8 @@ app.add_middleware(
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    from broll import available as broll_available
+    return {"ok": True, "broll": broll_available()}
 
 
 class UpscaleReq(BaseModel):
@@ -50,13 +51,14 @@ class ArtDirectReq(BaseModel):
     keywords: list[str] = []
     direction: str = ""
     style: str = "auto"
+    genre: str = ""
 
 
 @app.post("/artdirect")
 def artdirect(req: ArtDirectReq):
     """Album-cover design knowledge -> professional prompt + layer recipe."""
     from artdirection import direct
-    return direct(req.moods, req.keywords, req.direction, req.style)
+    return direct(req.moods, req.keywords, req.direction, req.style, req.genre)
 
 
 @app.get("/artstyles")
@@ -245,6 +247,9 @@ async def lyric_video(
     cover_url: str = Form(""),
     file_id: str = Form(""),
     words_json: str = Form(""),
+    bg: str = Form("cover"),
+    moods: str = Form(""),
+    style: str = Form(""),
     file: UploadFile | None = File(None),
 ):
     """Render a 15s kinetic lyric video from the hook of the track."""
@@ -273,8 +278,9 @@ async def lyric_video(
         except Exception:
             words_override = None
     try:
-        meta = make_lyric_video_premium(audio_path, lyrics, cover_url, title,
-                                        artist, out, words_override)
+        meta = make_lyric_video_premium(
+            audio_path, lyrics, cover_url, title, artist, out, words_override,
+            bg=bg, moods=[m for m in moods.split(",") if m], style=style)
     except Exception as e:
         print("premium engine fell back:", e)
         meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out)

@@ -18,6 +18,9 @@ KW = {
     "driving": ["city at night", "headlights", "speed"],
     "crisp": ["clean lines", "high contrast"],
     "warm": ["amber", "sunset", "analog film"],
+    "dreamy": ["soft haze", "double exposure", "pastel fog"],
+    "aggressive": ["harsh flash", "high contrast", "raw concrete"],
+    "romantic": ["candlelight", "silk", "warm skin tones"],
 }
 
 def corr(a, b):
@@ -39,10 +42,22 @@ def analyze(path):
     rms = float(librosa.feature.rms(y=y).mean())
     cent = float(librosa.feature.spectral_centroid(y=y, sr=sr).mean())
     mode = best[2]
-    moods = ["emotional", "moody"] if mode == "minor" else ["bright", "uplifting"]
-    moods.append("energetic" if tempo >= 125 else ("mellow" if tempo <= 95 else "driving"))
-    moods.append("crisp" if cent > 3000 else "warm")
-    moods = list(dict.fromkeys(moods))[:3]
+    # v2: CLAP actually listens (3-window read); heuristic is the fallback
+    genre = ""
+    clap = None
+    try:
+        from vibe import listen
+        clap = listen(path)
+    except Exception:
+        clap = None
+    if clap and clap.get("moods"):
+        moods = clap["moods"][:3]
+        genre = clap.get("genre", "")
+    else:
+        moods = ["emotional", "moody"] if mode == "minor" else ["bright", "uplifting"]
+        moods.append("energetic" if tempo >= 125 else ("mellow" if tempo <= 95 else "driving"))
+        moods.append("crisp" if cent > 3000 else "warm")
+        moods = list(dict.fromkeys(moods))[:3]
     kws = []
     for m in moods:
         kws += KW.get(m, [])
@@ -51,6 +66,7 @@ def analyze(path):
     return {
         "key": key, "bpm": round(tempo), "duration": f"{mm}:{ss:02d}",
         "duration_sec": round(dur, 1), "moods": moods, "keywords": kws,
+        "genre": genre,
     }
 
 if __name__ == "__main__":

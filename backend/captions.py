@@ -17,6 +17,9 @@ MOOD_LINES = {
     "mellow": ["slow it down with me", "for the quiet hours", "breathe. press play."],
     "crisp": ["every detail on this mix is intentional", "headphones recommended", "clean. sharp. loud."],
     "warm": ["analog heart, digital world", "this one feels like home", "warm one for the cold days"],
+    "dreamy": ["float with me for three minutes", "this one lives between sleep and awake", "headphones and eyes closed"],
+    "aggressive": ["play this one loud or not at all", "no soft edges on this one", "run it back until the neighbors complain"],
+    "romantic": ["for the one you're thinking about right now", "slow dance energy", "send this to them. you know who."],
 }
 
 HASHTAG_BASE = ["newmusic", "independentartist", "unreleasedmusic", "musicrelease"]
@@ -25,6 +28,7 @@ MOOD_TAGS = {
     "driving": ["nightdrive", "carmusic"], "bright": ["feelgoodmusic"],
     "uplifting": ["motivation"], "energetic": ["hypemusic"],
     "mellow": ["chillmusic", "lofivibes"], "crisp": ["producerlife"], "warm": ["vibes"],
+    "dreamy": ["dreampop", "etherealmusic"], "aggressive": ["hardestout"], "romantic": ["slowjam", "lovesongs"],
 }
 
 

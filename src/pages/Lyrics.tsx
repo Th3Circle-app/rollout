@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AudioLines,
   Clapperboard,
@@ -41,6 +41,12 @@ export default function App() {
   const [status, setStatus] = useState<"idle" | "rendering" | "done" | "error">("idle");
   const [videoUrl, setVideoUrl] = useState("");
   const [err, setErr] = useState("");
+  const [bg, setBg] = useState<"cover" | "broll">("cover");
+  const [brollUp, setBrollUp] = useState(false);
+  useEffect(() => {
+    fetch(`${API}/health`).then((r) => r.json())
+      .then((j) => setBrollUp(Boolean(j.broll))).catch(() => setBrollUp(false));
+  }, []);
 
   const fileId = (r as { file_id?: string }).file_id || "";
   const hasAudio = Boolean(fileId || audioFile);
@@ -104,6 +110,9 @@ export default function App() {
       fd.append("artist", r.artist);
       fd.append("cover_url", r.coverUrl || "");
       if (words.length) fd.append("words_json", JSON.stringify(words));
+      fd.append("bg", bg);
+      fd.append("moods", (r.moods || []).join(","));
+      try { fd.append("style", localStorage.getItem("rollout_style") || "auto"); } catch { /* ignore */ }
       if (audioFile) fd.append("file", audioFile);
       else fd.append("file_id", fileId);
       const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
@@ -256,6 +265,29 @@ export default function App() {
                   placeholder={"Paste the full lyrics — detection finds the timing,\nyour words replace anything misheard."}
                   className="min-h-28 font-mono rounded-lg bg-[#1E1E28] text-neutral-50 text-sm border-white/10 border-1 border-solid"
                 />
+              </div>
+
+              {/* background choice */}
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[11px] uppercase tracking-wider text-[#5E5A72]">Background</span>
+                <button
+                  onClick={() => setBg("cover")}
+                  className={"rounded-full border px-3 py-1.5 text-xs font-medium transition-colors " +
+                    (bg === "cover" ? "border-violet-500 bg-violet-500/15 text-[#F2F0F7]" : "border-white/10 text-[#9A96AD] hover:border-white/20")}
+                >
+                  Cover art
+                </button>
+                <button
+                  onClick={() => brollUp && setBg("broll")}
+                  disabled={!brollUp}
+                  title={brollUp ? "Aesthetic footage cut on the beat" : "Needs the free Pexels key on the engine (PEXELS_KEY)"}
+                  className={"rounded-full border px-3 py-1.5 text-xs font-medium transition-colors " +
+                    (bg === "broll" ? "border-violet-500 bg-violet-500/15 text-[#F2F0F7]"
+                      : brollUp ? "border-white/10 text-[#9A96AD] hover:border-white/20"
+                      : "border-white/8 text-[#5E5A72] opacity-60 cursor-not-allowed")}
+                >
+                  B-roll footage{!brollUp && <span className="ml-1.5 font-mono text-[9px] uppercase tracking-wider text-[#F0A45B]">key</span>}
+                </button>
               </div>
 
               {/* step 3 — render */}

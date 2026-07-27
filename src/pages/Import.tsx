@@ -9,7 +9,7 @@ const API = "http://127.0.0.1:8000";
 
 type Result = {
   filename: string; key: string; bpm: number; duration: string;
-  moods: string[]; keywords: string[]; file_id?: string;
+  moods: string[]; keywords: string[]; file_id?: string; genre?: string;
 };
 
 export default function App() {
@@ -141,6 +141,9 @@ export default function App() {
                     <div className="flex flex-col gap-3">
                       <div className="flex flex-wrap gap-2">
                         <span className="font-mono text-[#5E5A72] text-[11px] uppercase tracking-wider pt-1">Vibe</span>
+                        {result.genre && (
+                          <span className="rounded-full bg-violet-500/15 border border-violet-500/40 text-[#F2F0F7] text-xs px-3 py-1 capitalize">{result.genre}</span>
+                        )}
                         {result.moods.map((m) => (
                           <span key={m} className="rounded-full bg-[#1E1E28] text-[#F2F0F7] border border-white/8 text-xs px-3 py-1 capitalize">{m}</span>
                         ))}

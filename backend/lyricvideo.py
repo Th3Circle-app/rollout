@@ -161,7 +161,7 @@ def _save_cover(cover, dest):
 
 
 def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
-                             words_override=None):
+                             words_override=None, bg="cover", moods=None, style=""):
     """Premium path: demucs + stable-ts word alignment + Remotion render.
 
     words_override: word list from the lyric editor — exact user-approved
@@ -200,6 +200,46 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
 
     _save_cover(cover, os.path.join(public, "cover.jpg"))
 
+    # b-roll background: vibe-matched footage cut on the beat
+    clips_meta = []
+    if bg == "broll":
+        try:
+            from broll import fetch_clips
+            import shutil as _sh
+            import subprocess as _sp
+            files = fetch_clips(style or "film", moods or [], n=4)
+            if files:
+                broll_dir = os.path.join(public, "broll")
+                os.makedirs(broll_dir, exist_ok=True)
+                tempo_b, beat_frames_b = librosa.beat.beat_track(y=clip, sr=sr)
+                bts = list(librosa.frames_to_time(beat_frames_b, sr=sr))
+                bounds = [0.0] + [t for i, t in enumerate(bts) if i % 2 == 1 and t < CLIP_SEC] + [CLIP_SEC]
+                segs = [(bounds[i], bounds[i + 1]) for i in range(len(bounds) - 1)
+                        if bounds[i + 1] - bounds[i] > 0.25]
+                durs = []
+                for f in files:
+                    dest = os.path.join(broll_dir, os.path.basename(f))
+                    if not os.path.exists(dest):
+                        _sh.copy(f, dest)
+                    try:
+                        pr = _sp.run(["ffprobe", "-v", "error", "-show_entries",
+                                      "format=duration", "-of", "csv=p=0", dest],
+                                     capture_output=True, text=True, timeout=30)
+                        durs.append(max(1.0, float(pr.stdout.strip())))
+                    except Exception:
+                        durs.append(8.0)
+                for i, (t0, t1) in enumerate(segs):
+                    fi = i % len(files)
+                    seg_len = t1 - t0
+                    src_start = (i * 2.3) % max(0.2, durs[fi] - seg_len - 0.2)
+                    clips_meta.append({
+                        "file": "broll/" + os.path.basename(files[fi]),
+                        "start": round(t0, 3), "dur": round(seg_len, 3),
+                        "srcStart": round(src_start, 3),
+                    })
+        except Exception:
+            clips_meta = []  # fall back to cover background
+
     props = {
         "title": title.upper() or "UNTITLED",
         "artist": artist.upper(),
@@ -207,6 +247,7 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
         "audioFile": "clip.wav",
         "coverFile": "cover.jpg",
         "words": words,
+        "clips": clips_meta,
     }
     props_path = os.path.join(public, "props.json")
     with open(props_path, "w") as f:

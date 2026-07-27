@@ -132,6 +132,22 @@ STYLES = {
     },
 }
 
+# genre -> best-fit archetype (checked first in Auto)
+GENRE_STYLE = {
+    "hip hop rap": "street",
+    "trap": "street",
+    "drill": "street",
+    "r&b and soul": "soul",
+    "pop": "y2k",
+    "electronic dance music": "y2k",
+    "house music": "y2k",
+    "rock": "film",
+    "indie alternative": "film",
+    "folk acoustic singer songwriter": "film",
+    "ambient chill instrumental": "minimal",
+    "afrobeats": "collage",
+}
+
 # mood -> best-fit archetype for "Auto"
 MOOD_STYLE = {
     "emotional": "film",
@@ -143,16 +159,20 @@ MOOD_STYLE = {
     "mellow": "soul",
     "warm": "soul",
     "crisp": "minimal",
+    "dreamy": "painted",
+    "aggressive": "street",
+    "romantic": "soul",
 }
 
 
-def direct(moods=None, keywords=None, direction="", style="auto"):
+def direct(moods=None, keywords=None, direction="", style="auto", genre=""):
     """Build an art-directed prompt + layer recipe from the song's vibe."""
     moods = [m.lower() for m in (moods or [])]
     keywords = keywords or []
 
     if style == "auto" or style not in STYLES:
-        style = next((MOOD_STYLE[m] for m in moods if m in MOOD_STYLE), "film")
+        style = GENRE_STYLE.get(genre) or next(
+            (MOOD_STYLE[m] for m in moods if m in MOOD_STYLE), "film")
 
     s = STYLES[style]
     subject = direction.strip() or ", ".join(keywords[:3]) or "an evocative scene"

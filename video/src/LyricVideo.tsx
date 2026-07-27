@@ -2,6 +2,8 @@ import {
   AbsoluteFill,
   Audio,
   Img,
+  OffthreadVideo,
+  Sequence,
   interpolate,
   spring,
   staticFile,
@@ -13,6 +15,8 @@ export const FPS = 30;
 
 export type Word = { word: string; start: number; end: number };
 
+export type Clip = { file: string; start: number; dur: number; srcStart: number };
+
 export type LyricProps = {
   title: string;
   artist: string;
@@ -20,6 +24,7 @@ export type LyricProps = {
   audioFile: string;
   coverFile: string;
   words: Word[];
+  clips?: Clip[];
 };
 
 // Group aligned words into display lines (max 4 words / ~18 chars)
@@ -50,6 +55,7 @@ export const LyricVideo: React.FC<LyricProps> = ({
   audioFile,
   coverFile,
   words,
+  clips,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -84,19 +90,40 @@ export const LyricVideo: React.FC<LyricProps> = ({
     <AbsoluteFill style={{ backgroundColor: "#08080C" }}>
       <Audio src={staticFile(audioFile)} />
 
-      {/* cover background, blurred + darkened */}
-      <AbsoluteFill style={{ overflow: "hidden" }}>
-        <Img
-          src={staticFile(coverFile)}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            transform: `scale(${zoom}) translateY(${drift}px)`,
-            filter: "blur(46px) brightness(0.38) saturate(1.25)",
-          }}
-        />
-      </AbsoluteFill>
+      {/* background: beat-cut b-roll footage, else blurred cover */}
+      {clips && clips.length > 0 ? (
+        <AbsoluteFill style={{ overflow: "hidden" }}>
+          {clips.map((c, i) => (
+            <Sequence
+              key={i}
+              from={Math.round(c.start * fps)}
+              durationInFrames={Math.max(1, Math.round(c.dur * fps))}
+            >
+              <OffthreadVideo
+                src={staticFile(c.file)}
+                startFrom={Math.round(c.srcStart * fps)}
+                muted
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            </Sequence>
+          ))}
+          {/* darken for lyric legibility */}
+          <AbsoluteFill style={{ background: "rgba(5,5,10,0.42)" }} />
+        </AbsoluteFill>
+      ) : (
+        <AbsoluteFill style={{ overflow: "hidden" }}>
+          <Img
+            src={staticFile(coverFile)}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transform: `scale(${zoom}) translateY(${drift}px)`,
+              filter: "blur(46px) brightness(0.38) saturate(1.25)",
+            }}
+          />
+        </AbsoluteFill>
+      )}
 
       {/* vignette */}
       <AbsoluteFill

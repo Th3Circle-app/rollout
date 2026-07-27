@@ -12,6 +12,7 @@ export type Release = {
   coverUrl?: string;
   file_id?: string;
   lyrics?: string;
+  genre?: string;
 } | null;
 
 export function slugify(s: string) {

@@ -104,7 +104,7 @@ export default function App() {
       fetch("http://127.0.0.1:8000/artdirect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ moods: r.moods, keywords: r.keywords, direction, style }),
+        body: JSON.stringify({ moods: r.moods, keywords: r.keywords, direction, style, genre: (r as { genre?: string }).genre || "" }),
       })
         .then((res) => res.json())
         .then((j) => {
