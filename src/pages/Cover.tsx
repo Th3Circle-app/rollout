@@ -387,7 +387,7 @@ export default function App() {
     setLayers((L) => ({ ...L, [key]: { ...L[key], ...p } }));
 
   const regenerate = () => {
-    if (plan !== "pro") {
+    if (plan === "free") {
       openUpgrade("Unlimited AI covers");
       return;
     }
@@ -397,7 +397,7 @@ export default function App() {
 
   const download = async () => {
     // Doc freemium spec: high-res asset exporting is paywalled.
-    if (plan !== "pro") {
+    if (plan === "free") {
       openUpgrade("High-res export (3000×3000)");
       return;
     }
@@ -595,7 +595,7 @@ export default function App() {
                 </button>
               ))}
               <Button onClick={regenerate} variant="ghost" className="border border-white/10 text-[#9A96AD] gap-1.5 text-xs h-9">
-                {plan === "pro" ? <RefreshCw className="size-3.5" /> : <Lock className="size-3.5" />}
+                {plan !== "free" ? <RefreshCw className="size-3.5" /> : <Lock className="size-3.5" />}
                 New set
               </Button>
             </div>
@@ -610,7 +610,7 @@ export default function App() {
               </div>
               <div className="flex gap-2">
                 <Button onClick={download} disabled={downloading} className="bg-[#F2F0F7] text-[#0B0B0F] gap-2">
-                  {downloading ? <Loader2 className="size-4 animate-spin" /> : plan === "pro" ? <Download className="size-4" /> : <Lock className="size-4" />}
+                  {downloading ? <Loader2 className="size-4 animate-spin" /> : plan !== "free" ? <Download className="size-4" /> : <Lock className="size-4" />}
                   Export 3000px
                 </Button>
                 <Button

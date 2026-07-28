@@ -78,6 +78,21 @@ export default function Auth() {
           </div>
         </div>
 
+        {/* the deal, visible before the wall */}
+        <div className="mb-6 grid grid-cols-3 gap-2">
+          {[
+            { name: "Free", price: "$0", note: "first song" },
+            { name: "Artist", price: "$15", note: "per month" },
+            { name: "Studio", price: "$20", note: "per month" },
+          ].map((t) => (
+            <div key={t.name} className="edge rounded-xl border border-white/8 bg-[#0B0B0F] px-3 py-2.5 text-center">
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">{t.name}</div>
+              <div className="mt-0.5 font-bold text-[#F2F0F7] text-lg leading-6">{t.price}</div>
+              <div className="font-mono text-[9px] text-[#5E5A72]">{t.note}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="flex flex-col gap-3">
           {mode === "signup" && (
             <input

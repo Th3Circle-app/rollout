@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Compass, Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTour } from "@/components/Tour";
-import { useStore, FREE_SONG_LIMIT } from "@/store";
+import { useStore, FREE_SONG_LIMIT, PLAN_LABEL } from "@/store";
 
 const API = "http://127.0.0.1:8000";
 
@@ -32,7 +32,7 @@ export function loadImgConn(): ImgConn {
 }
 
 export default function App() {
-  const { plan, setPlan, songsUsed, release, session, cloud, signOut } = useStore();
+  const { plan, songsUsed, release, session, cloud, signOut, openUpgrade } = useStore();
   const { start } = useTour();
   const [engineUp, setEngineUp] = useState<boolean | null>(null);
   const [conn, setConn] = useState<ImgConn>(loadImgConn);
@@ -73,12 +73,14 @@ export default function App() {
       .catch(() => setEngineUp(false));
   }, []);
 
-  const PRO_PERKS = [
-    "Unlimited releases",
-    "High-res 3000×3000 exports",
-    "Caption copying + one-click posting",
-    "Kinetic lyric videos",
-    "Ad Center",
+  const TIER_PERKS: { label: string; need: "artist" | "studio" }[] = [
+    { label: "Unlimited releases", need: "artist" },
+    { label: "High-res 3000×3000 exports", need: "artist" },
+    { label: "Captions + one-click posting", need: "artist" },
+    { label: "Photo-to-cover modes", need: "artist" },
+    { label: "Kinetic lyric videos + b-roll", need: "studio" },
+    { label: "Ad Center", need: "studio" },
+    { label: "Premium AI models (first access)", need: "studio" },
   ];
 
   return (
@@ -100,35 +102,51 @@ export default function App() {
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-1">
               <span className="font-bold text-[#F2F0F7] text-2xl leading-8 tracking-tight">
-                {plan === "pro" ? "Rollout Pro" : "Free"}
+                {PLAN_LABEL[plan]}
               </span>
               <span className="font-mono text-[#5E5A72] text-xs leading-4">
-                {plan === "pro"
-                  ? "$12/mo · unlimited releases"
+                {plan === "studio"
+                  ? "$20/mo · everything unlocked"
+                  : plan === "artist"
+                  ? "$15/mo · unlimited releases"
                   : `${Math.max(0, FREE_SONG_LIMIT - songsUsed)} of ${FREE_SONG_LIMIT} free ${FREE_SONG_LIMIT === 1 ? "song" : "songs"} left`}
               </span>
             </div>
-            {plan === "pro" ? (
-              <Button variant="ghost" onClick={() => setPlan("free")} className="text-[#9A96AD] border border-white/8 rounded-xl">
-                Cancel Pro
-              </Button>
-            ) : (
-              <Button onClick={() => setPlan("pro")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white gap-2">
+            {plan === "free" ? (
+              <Button onClick={() => openUpgrade("Unlock the full rollout")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white gap-2">
                 <Sparkles className="size-4" />
-                Go Pro
+                Upgrade
               </Button>
-            )}
+            ) : plan === "artist" ? (
+              <Button onClick={() => openUpgrade("Step up to Studio")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white gap-2">
+                <Sparkles className="size-4" />
+                Get Studio
+              </Button>
+            ) : null}
           </div>
           <div className="border-white/8 border-t-1 border-r-0 border-b-0 border-l-0 border-solid pt-5 flex flex-col gap-3">
-            {PRO_PERKS.map((p) => (
-              <div key={p} className="flex items-center gap-3">
-                <div className={"size-5 rounded-full flex justify-center items-center " + (plan === "pro" ? "bg-[#46E0A8]/15" : "bg-[#1E1E28]")}>
-                  <Check className={"size-3 " + (plan === "pro" ? "text-[#46E0A8]" : "text-[#5E5A72]")} />
+            {TIER_PERKS.map(({ label, need }) => {
+              const has = need === "artist" ? plan !== "free" : plan === "studio";
+              return (
+                <div key={label} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className={"size-5 rounded-full flex justify-center items-center " + (has ? "bg-[#46E0A8]/15" : "bg-[#1E1E28]")}>
+                      <Check className={"size-3 " + (has ? "text-[#46E0A8]" : "text-[#5E5A72]")} />
+                    </div>
+                    <span className={(has ? "text-[#F2F0F7]" : "text-[#9A96AD]") + " text-sm leading-5"}>{label}</span>
+                  </div>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">
+                    {need === "artist" ? "Artist" : "Studio"}
+                  </span>
                 </div>
-                <span className={(plan === "pro" ? "text-[#F2F0F7]" : "text-[#9A96AD]") + " text-sm leading-5"}>{p}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {plan !== "free" && (
+            <p className="font-mono text-[11px] text-[#5E5A72]">
+              To cancel or change billing, use the receipt email from Stripe or contact support.
+            </p>
+          )}
         </div>
 
         {/* current release */}

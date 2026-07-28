@@ -80,6 +80,7 @@ export default function App() {
 
   return (
     <ProGate
+      tier="studio"
       feature="Ad Center"
       blurb="Template-driven Meta + Google campaigns pointed at your algorithm-free Th3Circle page — where you keep the fan data."
     >

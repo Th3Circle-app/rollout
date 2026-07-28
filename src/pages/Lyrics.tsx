@@ -139,6 +139,7 @@ export default function App() {
 
   return (
     <ProGate
+      tier="studio"
       feature="Kinetic lyric videos"
       blurb="Rollout finds the hook in your track and cuts a beat-synced 15s vertical lyric video, ready for TikTok."
     >

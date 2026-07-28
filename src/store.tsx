@@ -45,7 +45,32 @@ export function slugify(s: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export type Plan = "free" | "pro";
+export type Plan = "free" | "artist" | "studio";
+
+// Tier helpers: Artist = release properly, Studio = market like a machine.
+export const isPaid = (p: Plan) => p !== "free";
+export const isStudio = (p: Plan) => p === "studio";
+export const PLAN_LABEL: Record<Plan, string> = {
+  free: "Free", artist: "Rollout Artist", studio: "Rollout Studio",
+};
+
+// Live Stripe payment links (created 2026-07-28, Th3Circle account)
+export const PAYMENT_LINKS: Record<string, string> = {
+  "artist:month": "https://buy.stripe.com/aFa4gB8cV5qv7izfpx2880g",
+  "artist:year": "https://buy.stripe.com/28EcN7bp7cSXfP53GP2880h",
+  "studio:month": "https://buy.stripe.com/aFaeVf64N3in1Yf2CL2880i",
+  "studio:year": "https://buy.stripe.com/dRmeVf3WFaKPcCT9192880j",
+};
+
+export function checkoutUrl(tier: "artist" | "studio", interval: "month" | "year",
+                            uid?: string, email?: string) {
+  const base = PAYMENT_LINKS[`${tier}:${interval}`];
+  const params = new URLSearchParams();
+  if (uid) params.set("client_reference_id", uid);
+  if (email) params.set("prefilled_email", email);
+  const q = params.toString();
+  return q ? `${base}?${q}` : base;
+}
 
 // How many songs a free account can run through the pipeline.
 // Harrison 2026-07-27: "first song or first two, first three" — start at 1,
@@ -59,6 +84,7 @@ type Store = {
   setRelease: (r: Release) => void;
   plan: Plan;
   setPlan: (p: Plan) => void;
+  refreshPlan: () => Promise<void>;
   upgrade: { open: boolean; feature: string };
   openUpgrade: (feature: string) => void;
   closeUpgrade: () => void;
@@ -92,7 +118,10 @@ export function deriveTitleArtist(filename: string) {
 
 function loadPlan(): Plan {
   try {
-    return localStorage.getItem("rollout_plan") === "pro" ? "pro" : "free";
+    const p = localStorage.getItem("rollout_plan");
+    if (p === "pro" || p === "studio") return "studio"; // migrate old demo value
+    if (p === "artist") return "artist";
+    return "free";
   } catch {
     return "free";
   }
@@ -182,18 +211,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem("rollout_link", l); } catch { /* ignore */ }
   };
 
+  // In cloud mode the plan is SERVER truth (Stripe webhook -> DB -> here);
+  // setPlan only works as a demo toggle in local mode.
   const setPlan = (p: Plan) => {
+    if (cloudEnabled) return;
     setPlanState(p);
     try {
       localStorage.setItem("rollout_plan", p);
     } catch {
       /* ignore */
     }
-    // demo Pro flip syncs to the cloud profile (Stripe replaces this)
-    if (supabase && sessionRef.current) {
-      supabase.from("rollout_artists").update({ plan: p }).eq("id", sessionRef.current.user.id).then(() => {});
-    }
   };
+
+  // Re-pull the plan after checkout ("I've paid" refresh + window refocus)
+  const refreshPlan = async () => {
+    if (!supabase || !sessionRef.current) return;
+    const { data } = await supabase.from("rollout_artists")
+      .select("plan").eq("id", sessionRef.current.user.id).single();
+    if (data?.plan) setPlanState(data.plan as Plan);
+  };
+  useEffect(() => {
+    const onFocus = () => { refreshPlan(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── cloud session + profile + release sync (no-op in local mode) ────────
   const [session, setSession] = useState<Session | null>(null);
@@ -298,6 +340,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setRelease,
         plan,
         setPlan,
+        refreshPlan,
         upgrade,
         openUpgrade: (feature) => setUpgrade({ open: true, feature }),
         closeUpgrade: () => setUpgrade({ open: false, feature: "" }),

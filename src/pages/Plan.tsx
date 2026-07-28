@@ -107,7 +107,7 @@ export default function App() {
 
   const copy = async (c: Caption) => {
     // Doc freemium spec: text copying is paywalled.
-    if (plan !== "pro") {
+    if (plan === "free") {
       openUpgrade("Copy captions to clipboard");
       return;
     }
@@ -125,7 +125,7 @@ export default function App() {
   ];
 
   const handOff = async (c: Caption, s: (typeof SOCIALS)[number]) => {
-    if (plan !== "pro") {
+    if (plan === "free") {
       openUpgrade("One-click posting to your socials");
       return;
     }
@@ -235,7 +235,7 @@ export default function App() {
                         {s.label}
                       </button>
                     ))}
-                    {plan !== "pro" && <Lock className="size-3 text-[#5e5a72]" />}
+                    {plan === "free" && <Lock className="size-3 text-[#5e5a72]" />}
                   </div>
                 </div>
                 <div className="shrink-0">
@@ -246,7 +246,7 @@ export default function App() {
                   >
                     {copiedId === c.id ? (
                       <><Check className="size-4 text-[#46E0A8]" />Copied</>
-                    ) : plan === "pro" ? (
+                    ) : plan !== "free" ? (
                       <><Copy className="size-4" />Copy</>
                     ) : (
                       <><Lock className="size-4" />Copy<span className="text-[10px] font-semibold opacity-80">PRO</span></>

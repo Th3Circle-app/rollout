@@ -35,7 +35,7 @@ export default function App() {
       } catch { /* engine of record unavailable — fall through to local gate */ }
     }
     // Local-mode gate (and belt-and-suspenders alongside cloud)
-    if (plan !== "pro" && songsUsed >= FREE_SONG_LIMIT) {
+    if (plan === "free" && songsUsed >= FREE_SONG_LIMIT) {
       openUpgrade(
         FREE_SONG_LIMIT === 1
           ? "Your free song is used — unlock unlimited releases"
@@ -86,7 +86,7 @@ export default function App() {
           <div className="flex px-6 xl:px-12 pt-8 justify-end">
             <div className="rounded-full bg-[#15151C] border-white/8 border-1 border-solid flex px-3 py-1.5 items-center gap-2">
               <span className="font-mono text-[#5E5A72] text-[11px] tracking-wide">
-                {plan === "pro"
+                {plan !== "free"
                   ? "unlimited releases"
                   : `${Math.max(0, FREE_SONG_LIMIT - songsUsed)} of ${FREE_SONG_LIMIT} free ${FREE_SONG_LIMIT === 1 ? "song" : "songs"} left`}
               </span>
