@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase, cloudEnabled } from "./lib/supabase";
 
 export type Release = {
   filename: string;
@@ -13,6 +15,7 @@ export type Release = {
   file_id?: string;
   lyrics?: string;
   genre?: string;
+  id?: string; // cloud row id (rollout_releases)
 } | null;
 
 // Stable cover-concept seeds per session: Cover shows the SAME 4 concepts
@@ -65,6 +68,9 @@ type Store = {
   setReleaseDate: (d: string) => void;
   streamingLink: string;
   setStreamingLink: (l: string) => void;
+  session: Session | null;
+  cloud: boolean;
+  signOut: () => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -183,6 +189,92 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
+    // demo Pro flip syncs to the cloud profile (Stripe replaces this)
+    if (supabase && sessionRef.current) {
+      supabase.from("rollout_artists").update({ plan: p }).eq("id", sessionRef.current.user.id).then(() => {});
+    }
+  };
+
+  // ── cloud session + profile + release sync (no-op in local mode) ────────
+  const [session, setSession] = useState<Session | null>(null);
+  const sessionRef = useRef<Session | null>(null);
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      sessionRef.current = data.session;
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, sess) => {
+      setSession(sess);
+      sessionRef.current = sess;
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // on sign-in: ensure profile, hydrate plan/usage + latest release
+  useEffect(() => {
+    if (!supabase || !session) return;
+    (async () => {
+      const uid = session.user.id;
+      const meta = (session.user.user_metadata || {}) as { artist_name?: string };
+      await supabase.from("rollout_artists").upsert(
+        { id: uid, email: session.user.email || "", artist_name: meta.artist_name || "" },
+        { onConflict: "id", ignoreDuplicates: false }
+      );
+      const { data: prof } = await supabase.from("rollout_artists").select("plan,songs_used").eq("id", uid).single();
+      if (prof) {
+        setPlanState(prof.plan as Plan);
+        setSongs((old) => (old.length >= prof.songs_used ? old : Array.from({ length: prof.songs_used }, (_, i) => old[i] ?? `cloud-${i}`)));
+      }
+      // hydrate the most recent release if local is empty
+      if (!release) {
+        const { data: rows } = await supabase
+          .from("rollout_releases").select("*").eq("artist_id", uid)
+          .order("updated_at", { ascending: false }).limit(1);
+        const row = rows?.[0];
+        if (row) {
+          setRelease({
+            id: row.id, filename: row.filename, title: row.title,
+            artist: row.artist_name, key: row.key_sig, bpm: row.bpm,
+            duration: row.duration, moods: row.moods || [], keywords: row.keywords || [],
+            genre: row.genre || "", lyrics: row.lyrics || "",
+            coverUrl: row.cover_url || "", file_id: row.file_id || "",
+          });
+          if (row.release_date) setReleaseDateState(String(row.release_date));
+          if (row.streaming_link) setStreamingLinkState(row.streaming_link);
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
+
+  // debounced release upsert whenever the work changes
+  useEffect(() => {
+    if (!supabase || !session || !release) return;
+    const sb = supabase;
+    const t = setTimeout(async () => {
+      const id = release.id || crypto.randomUUID();
+      if (!release.id) setReleaseState({ ...release, id }); // keep id locally (avoid loop via direct state)
+      await sb.from("rollout_releases").upsert({
+        id,
+        artist_id: session.user.id,
+        title: release.title, artist_name: release.artist,
+        filename: release.filename, file_id: release.file_id || "",
+        key_sig: release.key, bpm: release.bpm, duration: release.duration,
+        moods: release.moods, keywords: release.keywords,
+        genre: release.genre || "", lyrics: release.lyrics || "",
+        cover_url: release.coverUrl || "",
+        release_date: releaseDate || null,
+        streaming_link: streamingLink || "",
+        slug: slugify(`${release.artist}-${release.title}`) || null,
+      });
+    }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, release, releaseDate, streamingLink]);
+
+  const signOut = () => {
+    if (supabase) supabase.auth.signOut();
   };
 
   // Re-running the same song doesn't burn another slot.
@@ -215,6 +307,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setReleaseDate,
         streamingLink,
         setStreamingLink,
+        session,
+        cloud: cloudEnabled,
+        signOut,
       }}
     >
       {children}

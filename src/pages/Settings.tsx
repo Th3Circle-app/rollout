@@ -32,7 +32,7 @@ export function loadImgConn(): ImgConn {
 }
 
 export default function App() {
-  const { plan, setPlan, songsUsed, release } = useStore();
+  const { plan, setPlan, songsUsed, release, session, cloud, signOut } = useStore();
   const { start } = useTour();
   const [engineUp, setEngineUp] = useState<boolean | null>(null);
   const [conn, setConn] = useState<ImgConn>(loadImgConn);
@@ -233,6 +233,19 @@ export default function App() {
             {testState === "fail" && <span className="font-mono text-xs text-[#F0A45B] truncate max-w-xs" title={testMsg}>● failed: {testMsg.slice(0, 60) || "check the key"}</span>}
           </div>
         </div>
+
+        {/* account */}
+        {cloud && session && (
+          <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Account</span>
+              <span className="font-mono text-[#5E5A72] text-xs leading-4">{session.user.email}</span>
+            </div>
+            <Button variant="ghost" onClick={signOut} className="border border-white/8 text-[#9A96AD] hover:text-[#F2F0F7] rounded-xl">
+              Sign out
+            </Button>
+          </div>
+        )}
 
         {/* help & about */}
         <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex flex-col gap-5">

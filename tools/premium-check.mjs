@@ -38,6 +38,7 @@ const ALLOWED_HEX = new Set(
     "08080C", "0A0A0F", // body base
     // brand colors (platform buttons only)
     "1DB954", "FA57C1", "FF0000", "FF5500", "1877F2",
+    "EA4335", "4285F4", "FBBC05", "34A853", // Google logo (official)
     // compositor/canvas art internals (not UI chrome)
     "FFFFFF", "000000",
   ].map((s) => s.toUpperCase())

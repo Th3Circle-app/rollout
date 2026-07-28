@@ -10,6 +10,7 @@ import Ads from "./pages/Ads";
 import Ship from "./pages/Ship";
 import Settings from "./pages/Settings";
 import { useEffect, useState } from "react";
+import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
 import UpgradeModal from "./components/UpgradeModal";
 import { TourProvider } from "./components/Tour";
@@ -47,7 +48,7 @@ const PAGES: Record<string, React.ComponentType> = {
 };
 
 function Shell() {
-  const { page } = useStore();
+  const { page, cloud, session } = useStore();
   const Current = PAGES[page] ?? Import;
 
   useEffect(() => {
@@ -64,6 +65,11 @@ function Shell() {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // multi-tenant: cloud mode requires an account
+  if (cloud && !session) {
+    return <Auth />;
+  }
 
   if (tooSmall) {
     return (

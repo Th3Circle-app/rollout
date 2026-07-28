@@ -6,11 +6,16 @@
 [Browser] ── Netlify ───────────── rollout frontend (this repo /src, /dist)
     │            └───────────────── /r/{slug} fan pages (generated per release)
     │
-    ├── Supabase ─────────────────  auth (email/password + magic link + Google
+    ├── Supabase (OWN project "rollout" — NEVER Th3Circle's DB; Harrison's
+    │              rule 2026-07-28)  auth (email/password + magic link + Google
     │                               OAuth; Apple/Microsoft/etc = dashboard
     │                               toggles), Postgres (tenants, releases,
     │                               assets, metering), Storage (audio, covers,
-    │                               videos), RLS per artist
+    │                               videos), RLS per artist.
+    │                               Schema: supabase/001_rollout_schema.sql
+    │                               Connect: fill src/lib/supabase.ts (URL +
+    │                               anon key) -> cloud mode activates; empty
+    │                               values = local mode.
     │
     └── Engine host (Railway/Fly) ─ backend/ Python FastAPI: analysis, lyric
                                     detection/alignment, rembg, art direction,

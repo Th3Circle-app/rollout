@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, deriveTitleArtist, FREE_SONG_LIMIT } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const API = "http://127.0.0.1:8000";
 
@@ -23,7 +24,17 @@ export default function App() {
   const [lyrics, setLyrics] = useState("");
 
   async function handleFile(f: File) {
-    // Free tier: first FREE_SONG_LIMIT distinct songs, then upgrade.
+    // Cloud mode: the SERVER meters free slots (client can't cheat).
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.rpc("rollout_consume_song_slot", { fname: f.name });
+        if (!error && data && data.ok === false) {
+          openUpgrade("Your free song is used — unlock unlimited releases");
+          return;
+        }
+      } catch { /* engine of record unavailable — fall through to local gate */ }
+    }
+    // Local-mode gate (and belt-and-suspenders alongside cloud)
     if (plan !== "pro" && songsUsed >= FREE_SONG_LIMIT) {
       openUpgrade(
         FREE_SONG_LIMIT === 1
