@@ -144,7 +144,7 @@ export default function App() {
     <div className="text-neutral-50 min-h-screen">
       {/* main */}
       <div className="overflow-y-auto flex-1 h-screen">
-        <div className="flex px-12 pt-8 justify-between items-center">
+        <div className="flex px-6 xl:px-12 pt-8 justify-between items-center">
           <div className="text-[#9A96AD] text-sm">
             Releases<span className="text-[#9A96AD]/50 mx-1">/</span>{r.title}
             <span className="text-[#9A96AD]/50 mx-1">/</span>
@@ -155,7 +155,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="px-12 py-8 flex flex-col gap-8 max-w-4xl">
+        <div className="px-6 xl:px-12 py-8 flex flex-col gap-8 max-w-4xl">
           <div className="flex flex-col gap-2">
             <h1 className="font-bold text-3xl tracking-tight">The dead zone, handled.</h1>
             <p className="text-[#9A96AD] text-sm">

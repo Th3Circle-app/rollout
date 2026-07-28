@@ -69,7 +69,7 @@ export default function App() {
   );
 
   return (
-    <div className="flex px-16 py-12 flex-col items-center flex-1 min-h-screen">
+    <div className="flex px-6 xl:px-16 py-12 flex-col items-center flex-1 min-h-screen">
       <div className="max-w-[720px] flex mb-10 justify-between items-center w-full">
         <div className="text-[#5E5A72] text-sm leading-5">
           <button className="text-[#9A96AD]" onClick={() => go("Dashboard")}>Releases</button>

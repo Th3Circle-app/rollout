@@ -9,7 +9,7 @@ import Landing from "./pages/Landing";
 import Ads from "./pages/Ads";
 import Ship from "./pages/Ship";
 import Settings from "./pages/Settings";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import UpgradeModal from "./components/UpgradeModal";
 import { TourProvider } from "./components/Tour";
@@ -53,6 +53,33 @@ function Shell() {
   useEffect(() => {
     document.title = `${TITLES[page] ?? "Rollout"} · Rollout`;
   }, [page]);
+
+  // Rollout is a desktop studio. Phones get a designed hand-off, not a
+  // broken layout. (Mobile companion is roadmap.)
+  const [tooSmall, setTooSmall] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 960
+  );
+  useEffect(() => {
+    const onResize = () => setTooSmall(window.innerWidth < 960);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  if (tooSmall) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#0B0B0F] px-8 text-center">
+        <div className="size-12 rounded-xl bg-violet-500 flex items-center justify-center">
+          <span className="font-bold text-[#0B0B0F] text-xl">⚡</span>
+        </div>
+        <h1 className="font-bold text-[#F2F0F7] text-2xl tracking-tight">Rollout is a studio.</h1>
+        <p className="max-w-xs text-[#9A96AD] text-sm leading-6">
+          Cover canvases, lyric editors, and release plans need room to breathe.
+          Open Rollout on your computer to build your drop.
+        </p>
+        <span className="font-mono text-[#5E5A72] text-xs">mobile companion coming after launch</span>
+      </div>
+    );
+  }
 
   return (
     <div className="app-bg flex min-h-screen text-neutral-50">

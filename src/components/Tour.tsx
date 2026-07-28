@@ -80,6 +80,16 @@ export function TourProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
+  // If the user takes over navigation (back button, sidebar), the tour bows out.
+  useEffect(() => {
+    const onPop = () => {
+      if (open) finish();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const finish = () => {
     setStep(-1);
     try {

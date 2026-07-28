@@ -53,12 +53,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col flex-1">
-      <div className="flex px-12 pt-8 justify-end">
+      <div className="flex px-6 xl:px-12 pt-8 justify-end">
         <div className="font-mono rounded-full bg-[#15151C] text-[#9A96AD] text-xs leading-4 border-white/8 border-1 border-solid px-3 py-1.5">
           {r.key} · {r.bpm} BPM · {r.duration}
         </div>
       </div>
-      <div className="flex px-12 pt-6 pb-12 flex-1 gap-8">
+      <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-1 gap-8">
         <div className="max-w-[820px] flex flex-col flex-1 gap-8">
           {/* header */}
           <div className="border-white/8 border-t-0 border-r-0 border-b-1 border-l-0 border-solid flex pb-8 justify-between items-center">

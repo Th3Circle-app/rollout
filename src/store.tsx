@@ -15,6 +15,25 @@ export type Release = {
   genre?: string;
 } | null;
 
+// Stable cover-concept seeds per session: Cover shows the SAME 4 concepts
+// across visits (and Build's prefetch actually warms them). "New set" rotates.
+export function getSeeds(): number[] {
+  try {
+    const raw = localStorage.getItem("rollout_seeds");
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (Array.isArray(s) && s.length === 4) return s;
+    }
+  } catch { /* ignore */ }
+  return rotateSeeds();
+}
+
+export function rotateSeeds(): number[] {
+  const s = Array.from({ length: 4 }, () => Math.floor(Math.random() * 1_000_000));
+  try { localStorage.setItem("rollout_seeds", JSON.stringify(s)); } catch { /* ignore */ }
+  return s;
+}
+
 export function slugify(s: string) {
   return s
     .toLowerCase()

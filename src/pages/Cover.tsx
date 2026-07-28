@@ -13,7 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useStore } from "@/store";
+import { useStore, getSeeds, rotateSeeds } from "@/store";
 import { loadImgConn } from "@/pages/Settings";
 import { renderStack, DEFAULT_LAYERS, type Layers as LayerStack, type BlendMode } from "@/compositor";
 
@@ -33,8 +33,7 @@ const fullPrompt = (direction: string, keywords: string[], moods: string[]) => {
   );
 };
 
-const newSeeds = () =>
-  Array.from({ length: 4 }, () => Math.floor(Math.random() * 1_000_000));
+
 
 const BLENDS: BlendMode[] = ["overlay", "multiply", "screen", "soft-light", "color"];
 const FONTS = ["Arial Black", "Georgia", "Courier New", "Helvetica Neue"];
@@ -55,7 +54,7 @@ export default function App() {
   };
 
   const [direction, setDirection] = useState("");
-  const [seeds, setSeeds] = useState<number[]>(newSeeds());
+  const [seeds, setSeeds] = useState<number[]>(getSeeds());
   const [selected, setSelected] = useState(0);
   const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const [downloading, setDownloading] = useState(false);
@@ -65,6 +64,29 @@ export default function App() {
   const subjectImgRef = useRef<HTMLImageElement | null>(null);
   const subjectBlobRef = useRef<Blob | null>(null);
   const [subjectPrompt, setSubjectPrompt] = useState("");
+  // restore the subject cut-out across reloads (it's part of the work)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("rollout_subject");
+      if (saved) {
+        const img = new Image();
+        img.onload = () => { subjectImgRef.current = img; draw(); };
+        img.src = saved;
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persistSubject = (blob: Blob) => {
+    try {
+      const fr = new FileReader();
+      fr.onload = () => {
+        try { localStorage.setItem("rollout_subject", String(fr.result)); }
+        catch { /* over quota — preview still works this session */ }
+      };
+      fr.readAsDataURL(blob);
+    } catch { /* ignore */ }
+  };
   // model catalog — artists pick a model like a filter, zero API knowledge
   type CatalogModel = { id: string; label: string; provider: string; model: string; tier: string; available: boolean };
   const [catalog, setCatalog] = useState<CatalogModel[]>([]);
@@ -160,6 +182,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error("cut-out failed");
       const blob = await res.blob();
+      persistSubject(blob);
       const img = new Image();
       img.onload = () => {
         subjectImgRef.current = img;
@@ -323,6 +346,7 @@ export default function App() {
       if (!res.ok) throw new Error("cutout failed");
       const blob = await res.blob();
       subjectBlobRef.current = blob;
+      persistSubject(blob);
       const img = new Image();
       img.onload = () => {
         subjectImgRef.current = img;
@@ -368,7 +392,7 @@ export default function App() {
       return;
     }
     setLoaded({});
-    setSeeds(newSeeds());
+    setSeeds(rotateSeeds());
   };
 
   const download = async () => {
@@ -483,7 +507,7 @@ export default function App() {
       <div className="text-neutral-50 min-h-screen">
         {/* main */}
         <div className="overflow-y-auto flex-1 h-screen">
-          <div className="flex px-12 pt-8 justify-between items-center">
+          <div className="flex px-6 xl:px-12 pt-8 justify-between items-center">
             <div className="text-[#9A96AD] text-sm leading-5">
               Releases<span className="text-[#9A96AD]/50 mx-1">/</span>{r.title}
               <span className="text-[#9A96AD]/50 mx-1">/</span>
@@ -541,7 +565,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="flex px-12 py-8 items-start gap-8">
+          <div className="flex px-6 xl:px-12 py-8 items-start gap-8">
             {/* base variants — Screen 6 style: rounded-2xl + amber AI badge */}
             <div className="shrink-0 flex flex-col gap-4 w-32">
               <div className="uppercase text-[#9A96AD] text-xs tracking-widest mb-1">Options</div>
@@ -578,7 +602,7 @@ export default function App() {
 
             {/* live composite preview */}
             <div className="flex flex-col items-center gap-3">
-              <div className="relative aspect-square rounded-3xl border-white/10 border-1 border-solid w-105 overflow-hidden bg-[#15151C]">
+              <div className="relative aspect-square rounded-3xl border-white/10 border-1 border-solid w-80 xl:w-105 overflow-hidden bg-[#15151C]">
                 <canvas ref={canvasRef} className="w-full h-full" />
               </div>
               <div className="font-mono text-[#9A96AD] text-xs">

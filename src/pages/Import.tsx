@@ -72,7 +72,7 @@ export default function App() {
       <div className="text-neutral-50 min-h-screen">
         {/* main */}
         <div className="min-h-screen flex flex-col flex-1">
-          <div className="flex px-12 pt-8 justify-end">
+          <div className="flex px-6 xl:px-12 pt-8 justify-end">
             <div className="rounded-full bg-[#15151C] border-white/8 border-1 border-solid flex px-3 py-1.5 items-center gap-2">
               <span className="font-mono text-[#5E5A72] text-[11px] tracking-wide">
                 {plan === "pro"
@@ -82,7 +82,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex px-12 pb-16 flex-col justify-center items-center flex-1">
+          <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
             <div className="max-w-[720px] text-center flex mb-10 flex-col items-center gap-3 w-full">
               <span className="font-semibold uppercase text-violet-500 text-[11px] tracking-[3.2px]">New Release</span>
               <h1 className="font-bold text-[#F2F0F7] text-5xl leading-12 tracking-tight">Start a release.</h1>

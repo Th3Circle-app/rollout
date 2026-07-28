@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, AudioLines, Check, Circle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useStore } from "@/store";
+import { useStore, getSeeds } from "@/store";
 
 const API = "http://127.0.0.1:8000";
 
@@ -41,14 +41,26 @@ export default function App() {
       setStates((prev) => ({ ...prev, [k]: s }));
 
     (async () => {
-      // 1. Cover concepts — actually pull the 4 AI images into browser cache
+      // 1. Cover concepts — the SAME art-directed prompt + seeds Cover will
+      // show, so this prefetch genuinely warms the cache
       set("cover", "running");
-      const prompt =
+      let prompt =
         `album cover art, ${r.keywords.join(", ")}, ${r.moods.join(", ")} mood, ` +
-        `no text, no lettering, no words, high detail, cinematic lighting, ` +
-        `square composition, professional music artwork`;
+        `no text, no lettering, square composition`;
+      try {
+        const ad = await fetch("http://127.0.0.1:8000/artdirect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            moods: r.moods, keywords: r.keywords, direction: "",
+            style: (() => { try { return localStorage.getItem("rollout_style") || "auto"; } catch { return "auto"; } })(),
+            genre: (r as { genre?: string }).genre || "",
+          }),
+        });
+        if (ad.ok) prompt = (await ad.json()).prompt;
+      } catch { /* fall back to local prompt */ }
       await Promise.all(
-        [11, 22, 33, 44].map(
+        getSeeds().map(
           (seed) =>
             new Promise<void>((ok) => {
               const img = new Image();
@@ -103,14 +115,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col flex-1">
-      <div className="flex px-12 pt-8 justify-end">
+      <div className="flex px-6 xl:px-12 pt-8 justify-end">
         <div className="rounded-full bg-[#15151C] border-white/8 border-1 border-solid flex px-3 py-1.5 items-center gap-2">
           <span className="font-mono text-[#5E5A72] text-[11px] tracking-wide">
             {r.key} · {r.bpm} BPM
           </span>
         </div>
       </div>
-      <div className="flex px-12 pb-16 flex-col justify-center items-center flex-1">
+      <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
         <div className="max-w-[720px] text-center flex mb-10 flex-col items-center gap-3 w-full">
           <span className={
             "font-semibold uppercase text-[11px] tracking-[3.2px] " +

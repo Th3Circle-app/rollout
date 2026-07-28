@@ -113,8 +113,24 @@ export default function App() {
   const setUrl = (key: string, url: string) =>
     setLinks((ls) => ls.map((l) => (l.key === key ? { ...l, url } : l)));
 
-  const download = () => {
-    const blob = new Blob([html], { type: "text/html" });
+  const download = async () => {
+    // Inline the cover as a data URI so the exported page can never lose its
+    // art to a purged remote URL — the file is fully self-contained.
+    let exportHtml = html;
+    if (cover) {
+      try {
+        const res = await fetch(cover);
+        const blob = await res.blob();
+        const dataUri: string = await new Promise((ok, err) => {
+          const fr = new FileReader();
+          fr.onload = () => ok(String(fr.result));
+          fr.onerror = () => err(new Error("read failed"));
+          fr.readAsDataURL(blob);
+        });
+        exportHtml = buildHtml({ title: r.title, artist: r.artist, cover: dataUri, date, links });
+      } catch { /* keep URL version rather than fail the export */ }
+    }
+    const blob = new Blob([exportHtml], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "index.html";
@@ -136,7 +152,7 @@ export default function App() {
     <div className="text-neutral-50 min-h-screen">
       {/* main */}
       <div className="overflow-y-auto flex-1 h-screen">
-        <div className="flex px-12 pt-8 justify-between items-center">
+        <div className="flex px-6 xl:px-12 pt-8 justify-between items-center">
           <div className="text-[#9A96AD] text-sm">
             Releases<span className="text-[#9A96AD]/50 mx-1">/</span>{r.title}
             <span className="text-[#9A96AD]/50 mx-1">/</span>
@@ -147,7 +163,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex px-12 py-8 items-start gap-10">
+        <div className="flex px-6 xl:px-12 py-8 items-start gap-10">
           {/* live preview = the exact exported file */}
           <div className="shrink-0 flex flex-col items-center gap-3">
             <div className="rounded-[36px] border-white/10 border-1 border-solid bg-black p-3 ">
@@ -155,7 +171,7 @@ export default function App() {
                 title="Landing preview"
                 srcDoc={html}
                 className="rounded-3xl bg-black"
-                style={{ width: 340, height: 680, border: "none" }}
+                style={{ width: 300, height: 600, border: "none" }}
               />
             </div>
             <div className="font-mono text-[#5e5a72] text-xs">Live preview · what fans see</div>

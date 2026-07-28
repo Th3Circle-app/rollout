@@ -83,12 +83,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col flex-1">
-      <div className="flex px-12 pt-8 justify-end">
+      <div className="flex px-6 xl:px-12 pt-8 justify-end">
         <div className="font-mono rounded-full bg-[#15151C] text-[#9A96AD] text-xs leading-4 border-white/8 border-1 border-solid px-3 py-1.5">
           {engineUp === null ? "checking engine…" : engineUp ? "engine online" : "engine offline"}
         </div>
       </div>
-      <div className="flex px-12 pt-6 pb-12 flex-col gap-8 max-w-[720px]">
+      <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-col gap-8 max-w-[720px]">
         <div className="flex flex-col gap-2">
           <h1 className="font-bold text-[#F2F0F7] text-4xl leading-10 tracking-tight">Settings</h1>
           <p className="text-[#9A96AD] text-sm leading-5">Your plan, usage, and engine status.</p>
