@@ -162,6 +162,8 @@ MOOD_STYLE = {
     "dreamy": "painted",
     "aggressive": "street",
     "romantic": "soul",
+    "introspective": "film",
+    "triumphant": "film",
 }
 
 

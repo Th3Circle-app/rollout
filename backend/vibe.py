@@ -22,6 +22,8 @@ _CLAP = None
 
 MOOD_LABELS = {
     "emotional and heartfelt": "emotional",
+    "introspective and reflective": "introspective",
+    "triumphant and victorious": "triumphant",
     "dark and moody": "moody",
     "driving and rhythmic": "driving",
     "bright and cheerful": "bright",
@@ -32,8 +34,13 @@ MOOD_LABELS = {
     "crisp and polished": "crisp",
     "dreamy and ethereal": "dreamy",
     "aggressive and intense": "aggressive",
-    "romantic and sensual": "romantic",
+    "sexy bedroom slow jam": "romantic",
 }
+
+# Skepticism priors: presentation-risky tags must strongly dominate to
+# surface (artist feedback 2026-07-27: romantic false-fired on a
+# self-discovery song).
+PRIORS = {"romantic": -1.0}
 
 TEMPLATES = [
     "a {} song",
@@ -49,7 +56,7 @@ GENRE_LABELS = [
 GENRE_TEMPLATES = ["a {} track", "{} music", "a song in the {} genre"]
 
 # music-theory advice: additive z-score boosts (ear leads, theory advises)
-MINOR_BOOST = {"emotional": 0.45, "moody": 0.45, "melancholy": 0.0}
+MINOR_BOOST = {"emotional": 0.45, "moody": 0.45, "introspective": 0.3}
 MAJOR_BOOST = {"bright": 0.35, "uplifting": 0.35}
 
 
@@ -111,27 +118,40 @@ def _zscore(sims):
     return (sims - sims.mean()) / (sims.std() + 1e-9)
 
 
-def listen(path, mode="", bpm=0):
+_AUDIO_CACHE = {}
+
+
+def listen(path, mode="", bpm=0, lyrics="", cache_key=""):
     """Return {moods, genre, scores} — calibrated, theory-advised. None on failure."""
     try:
         m = _model()
-        wavs = _windows(path)
-        embeds = m.get_audio_embedding_from_filelist(wavs, use_tensor=False)
-        audio = _norm(_norm(embeds).mean(axis=0, keepdims=True))
-        import os as _os
-        for w in wavs:
-            if w != path:
-                try: _os.unlink(w)
-                except OSError: pass
+        if cache_key and cache_key in _AUDIO_CACHE:
+            audio = _AUDIO_CACHE[cache_key]
+        else:
+            wavs = _windows(path)
+            embeds = m.get_audio_embedding_from_filelist(wavs, use_tensor=False)
+            audio = _norm(_norm(embeds).mean(axis=0, keepdims=True))
+            import os as _os
+            for w in wavs:
+                if w != path:
+                    try: _os.unlink(w)
+                    except OSError: pass
+            if cache_key:
+                _AUDIO_CACHE[cache_key] = audio
 
         # moods: ensemble + calibrate + theory advice
         labels = list(MOOD_LABELS.keys())
         vocab = list(MOOD_LABELS.values())
         mt = _ensemble_text(m, labels, TEMPLATES)
         z = _zscore((audio @ mt.T)[0])
+        # lyrics fusion: what the artist SAYS breaks ties in what we HEAR
+        if lyrics and lyrics.strip():
+            lyr = _norm(m.get_text_embedding(
+                [lyrics.strip()[:800]], use_tensor=False))
+            z = z + 0.5 * _zscore((lyr @ mt.T)[0])
         boost = MINOR_BOOST if mode == "minor" else MAJOR_BOOST if mode == "major" else {}
         for i, v in enumerate(vocab):
-            z[i] += boost.get(v, 0.0)
+            z[i] += boost.get(v, 0.0) + PRIORS.get(v, 0.0)
             if bpm and bpm >= 130 and v in ("energetic", "driving"):
                 z[i] += 0.3
             if bpm and bpm <= 85 and v in ("mellow", "dreamy"):

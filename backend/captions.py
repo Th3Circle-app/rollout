@@ -20,6 +20,8 @@ MOOD_LINES = {
     "dreamy": ["float with me for three minutes", "this one lives between sleep and awake", "headphones and eyes closed"],
     "aggressive": ["play this one loud or not at all", "no soft edges on this one", "run it back until the neighbors complain"],
     "romantic": ["for the one you're thinking about right now", "slow dance energy", "send this to them. you know who."],
+    "introspective": ["this one is a conversation with myself", "for the late night overthinkers", "sometimes the song is the therapy"],
+    "triumphant": ["proof that I made it through", "play this like you already won", "this is what the other side sounds like"],
 }
 
 HASHTAG_BASE = ["newmusic", "independentartist", "unreleasedmusic", "musicrelease"]
@@ -29,6 +31,7 @@ MOOD_TAGS = {
     "uplifting": ["motivation"], "energetic": ["hypemusic"],
     "mellow": ["chillmusic", "lofivibes"], "crisp": ["producerlife"], "warm": ["vibes"],
     "dreamy": ["dreampop", "etherealmusic"], "aggressive": ["hardestout"], "romantic": ["slowjam", "lovesongs"],
+    "introspective": ["deepthoughts", "musicthatheals"], "triumphant": ["motivation", "winning"],
 }
 
 

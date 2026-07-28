@@ -21,13 +21,15 @@ KW = {
     "dreamy": ["soft haze", "double exposure", "pastel fog"],
     "aggressive": ["harsh flash", "high contrast", "raw concrete"],
     "romantic": ["candlelight", "silk", "warm skin tones"],
+    "introspective": ["solitary window light", "mirror reflection", "quiet room"],
+    "triumphant": ["mountain summit", "golden rays", "raised hands silhouette"],
 }
 
 def corr(a, b):
     a = a - a.mean(); b = b - b.mean()
     return float((a @ b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-9))
 
-def analyze(path):
+def analyze(path, lyrics="", cache_key=""):
     y, sr = librosa.load(path, mono=True, sr=22050)
     dur = float(librosa.get_duration(y=y, sr=sr))
     tempo = float(np.atleast_1d(librosa.beat.beat_track(y=y, sr=sr)[0])[0])
@@ -47,7 +49,7 @@ def analyze(path):
     clap = None
     try:
         from vibe import listen
-        clap = listen(path, mode=mode, bpm=round(tempo))
+        clap = listen(path, mode=mode, bpm=round(tempo), lyrics=lyrics, cache_key=cache_key)
     except Exception:
         clap = None
     if clap and clap.get("moods"):

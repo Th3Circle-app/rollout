@@ -38,6 +38,8 @@ MOOD_QUERIES = {
     "warm": ["golden hour light", "field wind grass"],
     "bright": ["blue sky clouds", "beach waves sunny"],
     "crisp": ["minimal architecture", "snow mountain aerial"],
+    "introspective": ["rain window reflection", "person walking alone"],
+    "triumphant": ["mountain summit sunrise", "city skyline golden hour"],
 }
 
 

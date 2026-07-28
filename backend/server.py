@@ -108,6 +108,27 @@ def genimage(req: GenImageReq):
                         media_type="text/plain")
 
 
+class ReVibeReq(BaseModel):
+    file_id: str
+    lyrics: str = ""
+    mode: str = ""
+    bpm: int = 0
+
+
+@app.post("/revibe")
+def revibe(req: ReVibeReq):
+    """Refine the vibe with lyrics — fast (audio embedding is cached)."""
+    from vibe import listen
+    src = os.path.join(UPLOADS, os.path.basename(req.file_id))
+    if not os.path.exists(src):
+        return Response(status_code=404, content=b"unknown file_id")
+    r = listen(src, mode=req.mode, bpm=req.bpm, lyrics=req.lyrics,
+               cache_key=req.file_id)
+    if not r:
+        return Response(status_code=422, content=b"vibe engine unavailable")
+    return r
+
+
 class DetectReq(BaseModel):
     file_id: str
 
@@ -303,7 +324,7 @@ os.makedirs(UPLOADS, exist_ok=True)
 
 
 @app.post("/analyze")
-async def do_analyze(file: UploadFile = File(...)):
+async def do_analyze(file: UploadFile = File(...), lyrics: str = Form("")):
     suffix = os.path.splitext(file.filename or "")[1] or ".wav"
     # Keep the audio so the lyric-video engine can cut clips from it later.
     import uuid as _uuid
@@ -311,7 +332,7 @@ async def do_analyze(file: UploadFile = File(...)):
     path = os.path.join(UPLOADS, file_id)
     with open(path, "wb") as out:
         shutil.copyfileobj(file.file, out)
-    result = analyze(path)
+    result = analyze(path, lyrics=lyrics, cache_key=file_id)
     result["filename"] = file.filename
     result["file_id"] = file_id
     return result

@@ -200,10 +200,29 @@ export default function App() {
             <div className="flex mt-8 items-center gap-4">
               <Button
                 disabled={status !== "done"}
-                onClick={() => {
+                onClick={async () => {
                   if (!result) return;
                   const { title, artist } = deriveTitleArtist(result.filename || name);
-                  setRelease({ ...result, title, artist: artist || "", lyrics: lyrics.trim() });
+                  let refined = result;
+                  // lyrics refine the vibe (fast — audio embedding is cached)
+                  if (lyrics.trim() && result.file_id) {
+                    try {
+                      const res = await fetch(`${API}/revibe`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          file_id: result.file_id, lyrics: lyrics.trim(),
+                          mode: result.key.toLowerCase().includes("minor") ? "minor" : "major",
+                          bpm: result.bpm,
+                        }),
+                      });
+                      if (res.ok) {
+                        const v = await res.json();
+                        refined = { ...result, moods: v.moods, genre: v.genre };
+                      }
+                    } catch { /* keep original read */ }
+                  }
+                  setRelease({ ...refined, title, artist: artist || "", lyrics: lyrics.trim() });
                   go("Build"); // original flow: Import -> Building -> Ready -> hub
                 }}
                 className="font-semibold rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40"
