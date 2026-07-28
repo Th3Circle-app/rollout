@@ -58,12 +58,14 @@ export const useTour = () => useContext(Ctx);
 const DONE_KEY = "rollout_tour_done";
 
 export function TourProvider({ children }: { children: ReactNode }) {
-  const { go } = useStore();
+  const { go, cloud, session } = useStore();
+  const signedOut = cloud && !session;
   const [step, setStep] = useState<number>(-1); // -1 = closed
   const open = step >= 0;
 
   // First run: open once, gently, after the app settles.
   useEffect(() => {
+    if (signedOut) return; // tour belongs INSIDE the app, not on sign-in
     if (window.location.search.includes("autotest")) return; // self-test runs
     try {
       if (localStorage.getItem(DONE_KEY)) return;
@@ -72,7 +74,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
     }
     const t = setTimeout(() => setStep(0), 900);
     return () => clearTimeout(t);
-  }, []);
+  }, [signedOut]);
 
   // Each step shows its screen for real.
   useEffect(() => {
@@ -107,6 +109,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
       {children}
 
       {/* persistent help affordance */}
+      {!signedOut && (
       <button
         onClick={start}
         aria-label="Open the product tour"
@@ -115,6 +118,7 @@ export function TourProvider({ children }: { children: ReactNode }) {
       >
         <HelpCircle className="size-4" />
       </button>
+      )}
 
       {/* tour card */}
       {open && s && (
