@@ -47,7 +47,7 @@ def analyze(path):
     clap = None
     try:
         from vibe import listen
-        clap = listen(path)
+        clap = listen(path, mode=mode, bpm=round(tempo))
     except Exception:
         clap = None
     if clap and clap.get("moods"):

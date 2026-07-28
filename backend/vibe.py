@@ -1,44 +1,67 @@
-"""Rollout vibe engine v2 — CLAP zero-shot listening.
+"""Rollout vibe engine v3 — music-trained CLAP + calibrated zero-shot.
 
-librosa gives us the measurable (key, BPM, duration). CLAP actually LISTENS:
-it embeds the audio and scores it against natural-language descriptions, so
-"dark moody atmosphere" vs "bright cheerful sound" is decided by the sound
-itself, not by proxy statistics. Feeds moods (captions, art direction,
-interests) and genre (art direction archetype).
+What changed from v2 (and why the read got trustworthy):
+  1. MUSIC checkpoint (music_audioset_epoch_15_esc_90.14, HTSAT-base): trained
+     on music, hears musical mood — the general 630k ckpt heard "audio events".
+  2. Prompt ensembles: each label scored as the average of 3 phrasings, so
+     wording quirks stop deciding moods.
+  3. Z-score calibration across labels: raw CLAP similarities are biased per
+     prompt; normalizing makes ranks meaningful.
+  4. Five-window listen (early/quarter/hook/late/outro) averaged — the WHOLE
+     song votes.
+  5. Theory fusion: minor key and tempo nudge the ear (small z-boosts), so
+     "C minor at 99bpm" can break ties toward emotional/moody — ear leads,
+     theory advises.
+
+Commercial-safe: LAION-CLAP code + checkpoints are openly licensed (unlike
+Essentia's CC BY-NC-ND mood models, which CANNOT ship in a paid product).
 """
 import numpy as np
 
 _CLAP = None
 
-# label -> Rollout mood vocabulary (keeps captions/ads/art-direction in sync)
 MOOD_LABELS = {
-    "emotional heartfelt vocal performance": "emotional",
-    "dark moody brooding atmosphere": "moody",
-    "driving rhythmic forward motion": "driving",
-    "bright cheerful sunny sound": "bright",
-    "uplifting hopeful anthem": "uplifting",
-    "high energy hype banger": "energetic",
-    "mellow laid back smooth groove": "mellow",
-    "warm soulful analog warmth": "warm",
-    "crisp clean modern production": "crisp",
-    "dreamy ethereal floating atmosphere": "dreamy",
-    "aggressive intense hard hitting": "aggressive",
-    "romantic sensual slow jam": "romantic",
+    "emotional and heartfelt": "emotional",
+    "dark and moody": "moody",
+    "driving and rhythmic": "driving",
+    "bright and cheerful": "bright",
+    "uplifting and hopeful": "uplifting",
+    "energetic and hype": "energetic",
+    "mellow and laid back": "mellow",
+    "warm and soulful": "warm",
+    "crisp and polished": "crisp",
+    "dreamy and ethereal": "dreamy",
+    "aggressive and intense": "aggressive",
+    "romantic and sensual": "romantic",
 }
+
+TEMPLATES = [
+    "a {} song",
+    "this music sounds {}",
+    "a {} piece of music",
+]
 
 GENRE_LABELS = [
     "hip hop rap", "trap", "r&b and soul", "pop", "electronic dance music",
     "house music", "rock", "indie alternative", "folk acoustic singer songwriter",
     "ambient chill instrumental", "afrobeats", "drill",
 ]
+GENRE_TEMPLATES = ["a {} track", "{} music", "a song in the {} genre"]
+
+# music-theory advice: additive z-score boosts (ear leads, theory advises)
+MINOR_BOOST = {"emotional": 0.45, "moody": 0.45, "melancholy": 0.0}
+MAJOR_BOOST = {"bright": 0.35, "uplifting": 0.35}
 
 
 def _model():
     global _CLAP
     if _CLAP is None:
         import laion_clap
-        m = laion_clap.CLAP_Module(enable_fusion=False)
-        m.load_ckpt()  # cached 630k-audioset-best.pt
+        from huggingface_hub import hf_hub_download
+        ckpt = hf_hub_download(repo_id="lukewys/laion_clap",
+                               filename="music_audioset_epoch_15_esc_90.14.pt")
+        m = laion_clap.CLAP_Module(enable_fusion=False, amodel="HTSAT-base")
+        m.load_ckpt(ckpt)
         _CLAP = m
     return _CLAP
 
@@ -48,12 +71,10 @@ def _norm(v):
 
 
 def _windows(path):
-    """Cut three representative 10s windows (early, loudest/hook, late) so the
-    read reflects the WHOLE song, not just the intro."""
+    """Five representative 10s windows so the WHOLE song votes."""
     import librosa
     import soundfile as sf
     import tempfile
-    import os
 
     y, sr = librosa.load(path, mono=True, sr=48000)
     dur = len(y) / sr
@@ -63,12 +84,13 @@ def _windows(path):
     rms = librosa.feature.rms(y=y, hop_length=hop)[0]
     frames = int(10 * sr / hop)
     csum = np.cumsum(rms)
-    hook_start = 0.0
+    hook = 0.0
     if len(rms) > frames:
-        hook_start = int(np.argmax(csum[frames:] - csum[:-frames])) * hop / sr
-    starts = {max(0.0, dur * 0.1), hook_start, min(dur - 10, dur * 0.7)}
+        hook = int(np.argmax(csum[frames:] - csum[:-frames])) * hop / sr
+    starts = sorted({max(0.0, dur * f) for f in (0.08, 0.3, 0.6, 0.85)} | {hook})
     out = []
     for s in starts:
+        s = min(s, max(0.0, dur - 10))
         clip = y[int(s * sr): int((s + 10) * sr)]
         f = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         sf.write(f.name, clip, sr)
@@ -76,8 +98,21 @@ def _windows(path):
     return out
 
 
-def listen(path):
-    """Return {moods: [top3 vocab words], genre: str, scores: {...}} or None."""
+def _ensemble_text(m, labels, templates):
+    """Average embedding across phrasings per label -> (n_labels, dim)."""
+    embeds = []
+    for tpl in templates:
+        texts = [tpl.format(lb) for lb in labels]
+        embeds.append(_norm(m.get_text_embedding(texts, use_tensor=False)))
+    return _norm(np.mean(embeds, axis=0))
+
+
+def _zscore(sims):
+    return (sims - sims.mean()) / (sims.std() + 1e-9)
+
+
+def listen(path, mode="", bpm=0):
+    """Return {moods, genre, scores} — calibrated, theory-advised. None on failure."""
     try:
         m = _model()
         wavs = _windows(path)
@@ -89,11 +124,19 @@ def listen(path):
                 try: _os.unlink(w)
                 except OSError: pass
 
-        mood_texts = [f"a {t} song" for t in MOOD_LABELS]
-        mt = _norm(m.get_text_embedding(mood_texts, use_tensor=False))
-        mood_sims = (audio @ mt.T)[0]
-        order = np.argsort(mood_sims)[::-1]
+        # moods: ensemble + calibrate + theory advice
+        labels = list(MOOD_LABELS.keys())
         vocab = list(MOOD_LABELS.values())
+        mt = _ensemble_text(m, labels, TEMPLATES)
+        z = _zscore((audio @ mt.T)[0])
+        boost = MINOR_BOOST if mode == "minor" else MAJOR_BOOST if mode == "major" else {}
+        for i, v in enumerate(vocab):
+            z[i] += boost.get(v, 0.0)
+            if bpm and bpm >= 130 and v in ("energetic", "driving"):
+                z[i] += 0.3
+            if bpm and bpm <= 85 and v in ("mellow", "dreamy"):
+                z[i] += 0.3
+        order = np.argsort(z)[::-1]
         moods = []
         for i in order:
             if vocab[i] not in moods:
@@ -101,15 +144,15 @@ def listen(path):
             if len(moods) == 3:
                 break
 
-        genre_texts = [f"a {g} track" for g in GENRE_LABELS]
-        gt = _norm(m.get_text_embedding(genre_texts, use_tensor=False))
-        genre_sims = (audio @ gt.T)[0]
-        genre = GENRE_LABELS[int(np.argmax(genre_sims))]
+        # genre: ensemble + calibrate
+        gt = _ensemble_text(m, GENRE_LABELS, GENRE_TEMPLATES)
+        gz = _zscore((audio @ gt.T)[0])
+        genre = GENRE_LABELS[int(np.argmax(gz))]
 
         return {
             "moods": moods,
             "genre": genre,
-            "scores": {vocab[i]: round(float(mood_sims[i]), 3) for i in order[:5]},
+            "scores": {vocab[i]: round(float(z[i]), 2) for i in order[:6]},
         }
     except Exception:
         return None
