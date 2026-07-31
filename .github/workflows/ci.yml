@@ -1,0 +1,29 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Typecheck and build
+        run: npm run build
+      - name: Design contract grader (fails below 95/100)
+        run: npm run premium
+
+  engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # The full engine pulls a ~2GB CLAP checkpoint, which is not worth a CI
+      # minute on every push. Syntax-checking every module still catches the
+      # class of error that actually breaks deploys.
+      - name: Byte-compile the engine
+        run: python -m compileall -q backend
