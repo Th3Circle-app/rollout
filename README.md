@@ -13,6 +13,12 @@ Postgres with row-level security, Stripe subscriptions with server-enforced plan
 
 A Th3Circle product.
 
+![Rollout import screen with the free-tier usage counter in the corner](docs/img/import.png)
+
+*The entry point. Note the counter top right: `1 of 1 free song left`. The client renders
+that number, but it does not decide it — the limit is enforced in Postgres, which is the
+subject of the section below on metering.*
+
 ---
 
 ## The parts that were actually hard
@@ -85,6 +91,16 @@ itself a plan or reset its own usage counter.
 Same lesson as Th3Circle, where I found that row-level security gates *rows* but not
 *columns*, and closed it with a layered fix: RLS policies, an API-level column allowlist,
 and a database trigger.
+
+<img src="docs/img/plans.png" alt="Rollout sign-in showing the free, artist and studio
+tiers" width="420" align="right">
+
+The three tiers a session can hold. Which one you are on is a column the browser can read
+and cannot write: the trigger rejects the update even when the request carries a valid
+session for that exact row. The sign-in screen is the only place a tier is chosen, and the
+choice is settled server side.
+
+<br clear="right">
 
 ---
 
