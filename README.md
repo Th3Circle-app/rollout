@@ -203,7 +203,11 @@ laion-clap. First run downloads the CLAP checkpoint, roughly 2 GB.
 
 ## Quality gates
 
-- `npm run premium` enforces the design contract and fails the build below 95/100
+- `npm run premium` enforces the studio design contract and fails the build below 95/100
+- `npm run landing` gates the outward-facing surfaces (cinematic marketing landing +
+  public fan page) on what a cinematic page still owes: reduced-motion on every
+  animation, aria-hidden decorative layers, alt text, no missing/oversized assets,
+  no external CDN loads, a real CTA
 - `?page=Cover&autotest=composite` runs the image pipeline end to end and renders the
   flattened composite for inspection
 - `docs/COMPLETENESS-SPEC.md` is the app-furniture checklist (history, empty states,

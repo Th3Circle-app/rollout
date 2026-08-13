@@ -12,8 +12,10 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
-      - name: Design contract grader (fails below 95/100)
+      - name: Design contract grader (studio app, fails below 95/100)
         run: npm run premium
+      - name: Landing surface check (marketing + public surfaces)
+        run: npm run landing
 
   engine:
     runs-on: ubuntu-latest

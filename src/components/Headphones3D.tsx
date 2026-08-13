@@ -18,6 +18,12 @@ useGLTF.preload(MODEL);
 
 const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 
+// Respect the OS "reduce motion" setting: no idle spin, no cursor lean, no float
+// — the hero settles to a still pose instead of animating continuously.
+const PREFERS_REDUCED =
+  typeof window !== "undefined" &&
+  !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
 function Headphones({ scaleMul = 1, offsetY = 0 }: { scaleMul?: number; offsetY?: number }) {
   const group = useRef<THREE.Group>(null);
   const target = useRef({ x: 0, y: 0 });
@@ -63,17 +69,19 @@ function Headphones({ scaleMul = 1, offsetY = 0 }: { scaleMul?: number; offsetY?
   useFrame((state, delta) => {
     const g = group.current;
     if (!g) return;
-    // cinematic settle-in over ~1.6s: rise in scale, unwind an initial rotation
-    intro.current = Math.min(1, intro.current + delta / 1.6);
+    // cinematic settle-in over ~1.6s: rise in scale, unwind an initial rotation.
+    // With reduced-motion the settle snaps to done so nothing animates over time.
+    intro.current = PREFERS_REDUCED ? 1 : Math.min(1, intro.current + delta / 1.6);
     const p = easeOutCubic(intro.current);
     g.scale.setScalar(0.82 + 0.18 * p);
-    const spin = state.clock.elapsedTime * 0.1;
+    const spin = PREFERS_REDUCED ? 0 : state.clock.elapsedTime * 0.1;
     const introSpin = (1 - p) * -1.5;
     // INDEPENDENT reaction: the headphones only lean toward the cursor when it's
     // over them (near screen centre). Out in the blob's field they ignore the
     // cursor and just idle-float — so they're no longer linked to the blob.
+    // Reduced-motion disables the lean entirely (engage=0 -> a still pose).
     const dist = Math.hypot(target.current.x, target.current.y);
-    const engage = THREE.MathUtils.clamp(1 - dist / 0.4, 0, 1);
+    const engage = PREFERS_REDUCED ? 0 : THREE.MathUtils.clamp(1 - dist / 0.4, 0, 1);
     g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, target.current.x * 0.95 * engage + spin + introSpin, 0.09);
     g.rotation.x = THREE.MathUtils.lerp(g.rotation.x, target.current.y * 0.5 * engage, 0.09);
   });
@@ -124,7 +132,11 @@ export default function Headphones3D({ className, style, scaleMul = 1, offsetY =
         <pointLight position={[0, -3, 2]} intensity={5} color="#4b2fa0" />
 
         <Suspense fallback={null}>
-          <Float speed={1.1} rotationIntensity={0.12} floatIntensity={0.7}>
+          <Float
+            speed={PREFERS_REDUCED ? 0 : 1.1}
+            rotationIntensity={PREFERS_REDUCED ? 0 : 0.12}
+            floatIntensity={PREFERS_REDUCED ? 0 : 0.7}
+          >
             <Headphones scaleMul={scaleMul} offsetY={offsetY} />
           </Float>
           <ContactShadows position={[0, -1.7, 0]} opacity={0.55} scale={9} blur={2.8} far={4.5} color="#05010f" />
