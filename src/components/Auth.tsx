@@ -3,6 +3,7 @@ import { ArrowRight, Loader2, Mail, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import GlassBackground from "@/components/GlassBackground";
+import StarField from "@/components/StarField";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 // Three.js is heavy and only the sign-in screen needs it — code-split it so the
@@ -70,6 +71,7 @@ export default function Auth({ onBack }: { onBack?: () => void }) {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
       <GlassBackground />
+      <StarField />
       {onBack && (
         <button
           onClick={onBack}

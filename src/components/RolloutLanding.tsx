@@ -237,14 +237,14 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
       {/* fixed depth layer — the orb + 3D headphones persist across the whole
           page as you scroll, instead of living only in the hero */}
       <div className="pointer-events-none fixed inset-0 z-0">
-        <GlassBackground style={{ position: "absolute", opacity: 0.72 }} />
+        <GlassBackground style={{ position: "absolute", opacity: 0.95 }} />
         {/* twinkling stars + shooting stars (z1), over the blob's dark sky */}
         <StarField style={{ position: "absolute" }} />
         {/* smoke drifts BEHIND the headphones (z2) — depth without fogging the hero */}
         <SmokeLayer style={{ position: "absolute" }} />
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <Headphones3D style={{ position: "absolute", zIndex: 3 }} scaleMul={0.8} offsetY={-0.55} />
+            <Headphones3D style={{ position: "absolute", zIndex: 3 }} scaleMul={0.8} offsetY={-0.3} />
           </Suspense>
         </ErrorBoundary>
       </div>
@@ -311,7 +311,7 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
       </section>
 
       {/* one-line thesis */}
-      <section className="relative border-y border-white/8 bg-[#0B0B0F]/72 py-20">
+      <section className="relative border-y border-white/8 bg-[#0B0B0F]/45 py-20">
         <div className="mx-auto max-w-4xl px-6">
           <Reveal>
             <p className="text-balance text-center text-2xl font-semibold leading-snug tracking-tight text-[#F2F0F7] sm:text-4xl">
@@ -323,7 +323,7 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
       </section>
 
       {/* story sections */}
-      <section className="relative bg-[#0B0B0F]/72">
+      <section className="relative bg-[#0B0B0F]/45">
       <div ref={featuresRef} className="mx-auto max-w-6xl px-6 py-24">
         <div className="flex flex-col gap-28">
           {STEPS.map((s, i) => (
@@ -349,7 +349,7 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
       </section>
 
       {/* pricing */}
-      <section className="relative border-t border-white/8 bg-[#0B0B0F]/72 py-24">
+      <section className="relative border-t border-white/8 bg-[#0B0B0F]/45 py-24">
         <div className="mx-auto max-w-6xl px-6">
           <Reveal>
             <div className="mb-14 text-center">
@@ -421,7 +421,7 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
       </section>
 
       {/* footer */}
-      <footer className="relative border-t border-white/8 bg-[#0B0B0F]/72 py-10">
+      <footer className="relative border-t border-white/8 bg-[#0B0B0F]/45 py-10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
           <div className="flex items-center gap-2">
             <div className="flex size-5 items-center justify-center rounded-md bg-violet-500">

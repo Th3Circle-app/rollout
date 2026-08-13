@@ -1,7 +1,5 @@
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Float, Environment, Lightformer, ContactShadows, useGLTF } from "@react-three/drei";
-import { EffectComposer, Bloom, Noise } from "@react-three/postprocessing";
-import { BlendFunction } from "postprocessing";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -23,6 +21,184 @@ const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
 const PREFERS_REDUCED =
   typeof window !== "undefined" &&
   !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+// The violet glass blob — the raymarched metaball from the Handshake "Mimetic"
+// artifact, rendered as a fullscreen background INSIDE this same 3D canvas so it
+// shares the ONE WebGL context (a separate WebGL canvas gets evicted by three.js
+// and paints white on Harrison's machine). Transparent except the orb, so the
+// stars + smoke behind this canvas show through. Reacts to cursor + scroll.
+const BLOB_FRAG = `
+precision highp float;
+uniform float uT; uniform vec2 uR; uniform float uScroll; uniform vec2 uMouse;
+mat3 rotX(float a){float s=sin(a),c=cos(a);return mat3(1.,0.,0.,0.,c,-s,0.,s,c);}
+mat3 rotY(float a){float s=sin(a),c=cos(a);return mat3(c,0.,s,0.,1.,0.,-s,0.,c);}
+float smin(float a,float b,float k){float h=clamp(0.5+0.5*(b-a)/k,0.,1.);return mix(b,a,h)-k*h*(1.-h);}
+float sph(vec3 p,float r){return length(p)-r;}
+float map(vec3 p){
+  float t=uT*0.12+uScroll*3.14159;
+  p=rotY(t)*rotX(t*0.55)*p;
+  float d=sph(p,0.92);
+  d=smin(d,sph(p-vec3(0.70*sin(uT*0.30),0.60*cos(uT*0.40),0.30),0.55),0.55);
+  d=smin(d,sph(p-vec3(-0.60,0.50*sin(uT*0.50),0.40*cos(uT*0.30)),0.50),0.55);
+  d=smin(d,sph(p-vec3(0.20,-0.70,0.60*sin(uT*0.35)),0.50),0.55);
+  return d;
+}
+vec3 nrm(vec3 p){vec2 e=vec2(0.0013,0.);return normalize(vec3(map(p+e.xyy)-map(p-e.xyy),map(p+e.yxy)-map(p-e.yxy),map(p+e.yyx)-map(p-e.yyx)));}
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*uR)/uR.y;
+  // INDEPENDENT of the headphones: the blob drifts toward the cursor most when
+  // it's out in the background, and settles when the cursor is over the centred
+  // headphones — so the two never move in lockstep.
+  float eng=clamp(length(uMouse-0.5)/0.34,0.0,1.0);
+  vec3 ro=vec3((uMouse.x-0.5)*1.3*eng,(uMouse.y-0.5)*1.0*eng,3.3);
+  vec3 rd=normalize(vec3(uv,-1.7));
+  float t=0.;vec3 p=ro;bool hit=false;
+  for(int i=0;i<52;i++){p=ro+rd*t;float d=map(p);if(d<0.0015){hit=true;break;}t+=d*0.9;if(t>9.)break;}
+  if(!hit){gl_FragColor=vec4(0.);return;}
+  vec3 n=nrm(p);
+  vec3 ld=normalize(vec3(0.5,0.85,0.6));
+  float diff=clamp(dot(n,ld),0.,1.);
+  float fres=pow(1.-clamp(dot(n,-rd),0.,1.),3.0);
+  vec3 violet=vec3(0.55,0.36,0.97);
+  vec3 magenta=vec3(0.80,0.42,0.98);
+  vec3 base=mix(vec3(0.07,0.04,0.14),vec3(0.20,0.12,0.38),diff);
+  vec3 col=base + mix(violet,magenta,fres*0.5)*fres*1.6 + violet*diff*0.14;
+  float alpha=clamp(0.34+fres*0.55,0.,0.86);
+  gl_FragColor=vec4(col, alpha);
+}
+`;
+const BLOB_VERT = `void main(){ gl_Position=vec4(position.xy, 0.999, 1.0); }`;
+
+function Blob() {
+  const mat = useRef<THREE.ShaderMaterial>(null);
+  const { gl } = useThree();
+  const target = useRef({ x: 0.5, y: 0.5 });
+  const cur = useRef({ x: 0.5, y: 0.5 });
+  const uniforms = useMemo(
+    () => ({
+      uT: { value: 0 },
+      uR: { value: new THREE.Vector2(1, 1) },
+      uMouse: { value: new THREE.Vector2(0.5, 0.5) },
+      uScroll: { value: 0 },
+    }),
+    []
+  );
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    return g;
+  }, []);
+  useEffect(() => {
+    if (PREFERS_REDUCED) return;
+    const onMove = (e: PointerEvent) => {
+      target.current.x = e.clientX / window.innerWidth;
+      target.current.y = 1 - e.clientY / window.innerHeight;
+    };
+    const onLeave = () => {
+      target.current.x = 0.5;
+      target.current.y = 0.5;
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerleave", onLeave);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+  const tmp = useMemo(() => new THREE.Vector2(), []);
+  useFrame((state) => {
+    // update the MATERIAL's own uniforms (not the local object) so the clock,
+    // mouse, and scroll actually reach the shader every frame — this is what
+    // drives the continuous rotate + metaball morph.
+    const u = mat.current?.uniforms;
+    if (!u) return;
+    cur.current.x += (target.current.x - cur.current.x) * 0.06;
+    cur.current.y += (target.current.y - cur.current.y) * 0.06;
+    gl.getDrawingBufferSize(tmp);
+    u.uT.value = PREFERS_REDUCED ? 4 : state.clock.elapsedTime;
+    u.uR.value.set(tmp.x, tmp.y);
+    u.uMouse.value.set(cur.current.x, cur.current.y);
+    u.uScroll.value = Math.min(1, window.scrollY / window.innerHeight);
+  });
+  return (
+    <mesh geometry={geo} renderOrder={-10} frustumCulled={false}>
+      <shaderMaterial
+        ref={mat}
+        vertexShader={BLOB_VERT}
+        fragmentShader={BLOB_FRAG}
+        uniforms={uniforms}
+        transparent
+        depthTest={true}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+// The original drifting smoke — domain-warped fbm wisps that shift from deep
+// violet to bright lavender as they curl (the "white to purple" smoke). Rendered
+// in the SAME WebGL context as the blob + headphones (renderOrder between them),
+// additively blended so it glows against the dark. This is the shader version;
+// the CSS haze was a stopgap while the separate WebGL canvas kept whiting out.
+const SMOKE_FRAG = `
+precision highp float;
+uniform vec2 u_res; uniform float u_time;
+float hash(vec2 p){ p=fract(p*vec2(123.34,345.45)); p+=dot(p,p+34.345); return fract(p.x*p.y); }
+float noise(vec2 p){
+  vec2 i=floor(p), f=fract(p);
+  float a=hash(i), b=hash(i+vec2(1.,0.)), c=hash(i+vec2(0.,1.)), d=hash(i+vec2(1.,1.));
+  vec2 u=f*f*(3.-2.*f);
+  return mix(a,b,u.x)+(c-a)*u.y*(1.-u.x)+(d-b)*u.x*u.y;
+}
+float fbm(vec2 p){ float v=0.,a=0.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.02; a*=0.5; } return v; }
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*u_res)/u_res.y;
+  float t=u_time*0.05;
+  vec2 q=vec2(fbm(uv*1.4+vec2(0.,t)), fbm(uv*1.4+vec2(5.2,-t)));
+  vec2 r=vec2(fbm(uv*1.4+q*1.6+vec2(1.7,t*1.3)), fbm(uv*1.4+q*1.6+vec2(8.3,-t*1.1)));
+  float d=fbm(uv*1.5+r*2.0);
+  d=smoothstep(0.52,0.84,d);
+  d*=smoothstep(1.25,0.02,abs(uv.y));
+  vec3 smoke=mix(vec3(0.18,0.13,0.36), vec3(0.74,0.66,1.0), pow(d,0.8));
+  gl_FragColor=vec4(smoke, d*0.26);
+}
+`;
+
+function Smoke() {
+  const mat = useRef<THREE.ShaderMaterial>(null);
+  const { gl } = useThree();
+  const uniforms = useMemo(
+    () => ({ u_time: { value: 0 }, u_res: { value: new THREE.Vector2(1, 1) } }),
+    []
+  );
+  const geo = useMemo(() => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    return g;
+  }, []);
+  const tmp = useMemo(() => new THREE.Vector2(), []);
+  useFrame((state) => {
+    const u = mat.current?.uniforms;
+    if (!u) return;
+    gl.getDrawingBufferSize(tmp);
+    u.u_time.value = PREFERS_REDUCED ? 8 : state.clock.elapsedTime;
+    u.u_res.value.set(tmp.x, tmp.y);
+  });
+  return (
+    <mesh geometry={geo} renderOrder={-5} frustumCulled={false}>
+      <shaderMaterial
+        ref={mat}
+        vertexShader={BLOB_VERT}
+        fragmentShader={SMOKE_FRAG}
+        uniforms={uniforms}
+        transparent
+        depthTest={true}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
 
 function Headphones({ scaleMul = 1, offsetY = 0 }: { scaleMul?: number; offsetY?: number }) {
   const group = useRef<THREE.Group>(null);
@@ -118,12 +294,19 @@ export default function Headphones3D({ className, style, scaleMul = 1, offsetY =
       <Canvas
         camera={{ position: [0, 0.2, 4.3], fov: 40 }}
         dpr={[1, 1.6]}
+        // Transparent canvas so the blob / stars / smoke behind it show through.
+        // Keep premultipliedAlpha at its DEFAULT (true): with `false`, a fully
+        // transparent clear divides by zero when compositing and renders WHITE.
         gl={{ antialias: true, alpha: true }}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1.15;
+          gl.setClearColor(0x000000, 0); // transparent
         }}
       >
+        {/* atmosphere in the SAME WebGL context — blob (back), smoke (mid) */}
+        <Blob />
+        <Smoke />
         {/* three-point lighting for drama */}
         <ambientLight intensity={0.35} />
         <directionalLight position={[4, 6, 4]} intensity={3.2} />
@@ -147,11 +330,6 @@ export default function Headphones3D({ className, style, scaleMul = 1, offsetY =
             <Lightformer intensity={1} position={[0, -3, -2]} scale={[6, 3, 1]} color="#3a1f7a" />
           </Environment>
         </Suspense>
-
-        <EffectComposer>
-          <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.9} intensity={0.55} mipmapBlur />
-          <Noise premultiply blendFunction={BlendFunction.OVERLAY} opacity={0.03} />
-        </EffectComposer>
       </Canvas>
     </div>
   );

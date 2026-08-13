@@ -17,6 +17,8 @@ import { TourProvider } from "./components/Tour";
 import { StoreProvider, useStore } from "./store";
 import FanPage from "./pages/FanPage";
 import GlassBackground from "./components/GlassBackground";
+import StarField from "./components/StarField";
+import SmokeField from "./components/SmokeField";
 import RolloutLanding from "./components/RolloutLanding";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -113,6 +115,8 @@ function Shell() {
   return (
     <div className="app-bg relative flex min-h-screen text-neutral-50">
       <GlassBackground style={{ opacity: 0.45 }} />
+      <SmokeField />
+      <StarField />
       <div className="relative z-10 flex min-h-screen w-full">
         <Sidebar />
         <main key={page} className="page-enter min-w-0 flex-1">
