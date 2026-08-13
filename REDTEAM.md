@@ -21,6 +21,25 @@ every deploy and after any substantial change.
 > found 30 issues (SSRF, webhook gaps, races, event-loop blocking, no error
 > boundary, unbounded resources). That is why this checklist exists.
 
+## Runnable harness — one command (`tools/redteam/`)
+
+The loop is now versioned, runnable scripts, not ad-hoc scratchpad files:
+
+```bash
+tools/redteam/run.sh            # every leg, one verdict
+tools/redteam/run.sh --changed  # diff-scoped surface report
+```
+
+| Leg | Script | Closes the gap of… |
+|-----|--------|--------------------|
+| Verified tripwire | `verified.mjs` | verified work getting **removed** / a beaten trap returning (the landing kept getting re-broken). 11 invariants: atmosphere-in-one-WebGL-context, no EffectComposer, GlassBackground/SmokeLayer not WebGL, stars stay 2D, webhook ordering guard, netguard CGNAT+ports. |
+| Webhook ordering | `webhook_test.mjs` (node) | the billing logic was only ever **read** — now 7 replay scenarios (reorder, duplicate, same-second, unmapped-price, race) against a mock DB. |
+| Visual render | `visual.py` | a flat **white-out** hero passing a console-error check. Flat-frame detector (self-tested) over studio routes + the real cloud landing. |
+| Backend adversarial | `adversarial.py` | 61 cases, endpoint **coverage** tally, SSRF ×8 vectors, body-cap, traversal, PIL bomb, 12-thread concurrency probe. |
+| Design | `npm run premium` / `landing` | studio flat-contract + marketing-surface (reduced-motion, assets, self-contained). |
+
+CI runs the two cheap deterministic legs (tripwire + webhook test) on every push; the adversarial + visual legs run locally via `run.sh` (they need a live engine + served build). See [`redteam/README.md`](redteam/README.md).
+
 ---
 
 ## Checklist (verify EACH item against every file in scope)
@@ -229,3 +248,20 @@ every deploy and after any substantial change.
       both legs. Remaining items are the documented tracked-LOW / deferred list
       (backend JWT auth, object-URL revokes, per-release keys, same-second Stripe
       reorder) — none block deploy; each is gated to its feature or a config step.
+- **Loop hardening (2026-08-13).** Turned the loop from per-session agent
+      orchestration into a **runnable, versioned harness** under `tools/redteam/`
+      + one-command `run.sh` (diff-scoped). Closed the two blind spots from the
+      real R1–R6 run: (1) the **billing logic was only read** → extracted the
+      webhook ordering into `logic.mjs` and added `webhook_test.mjs` (7 replay
+      scenarios: reorder / duplicate / same-second / unmapped-price / race —
+      all PASS, no bug); (2) the **frontend suite went green on a white hero** →
+      added `visual.py`, a self-tested flat-frame/white-out detector that checks
+      the studio routes AND the real cloud landing (4/4 PASS, dark). Promoted the
+      backend suite to `adversarial.py` (61 cases, **15/15 endpoint coverage**,
+      SSRF ×8, body-cap, traversal, PIL-bomb, 12-thread concurrency probe — all
+      GREEN). Added a **verified-feature tripwire** (`verified.mjs`, 11 invariants)
+      so removing hard-won work (e.g. the landing atmosphere) or re-introducing a
+      beaten trap fails the build. CI now runs the tripwire + webhook test on
+      every push. Still open (documented in `redteam/README.md`): auth/RLS
+      runtime probe (no auth on the engine yet) and a live-Stripe signed replay
+      (needs deno on the box).

@@ -16,6 +16,10 @@ jobs:
         run: npm run premium
       - name: Landing surface check (marketing + public surfaces)
         run: npm run landing
+      - name: Verified-feature tripwire (fails if verified work was removed / a trap returned)
+        run: node tools/redteam/verified.mjs
+      - name: Stripe webhook ordering test (reorder / duplicate / same-second / race)
+        run: node tools/redteam/webhook_test.mjs
 
   engine:
     runs-on: ubuntu-latest
