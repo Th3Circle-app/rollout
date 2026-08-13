@@ -3,16 +3,11 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Layers,
-  Megaphone,
-  Package,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProGate from "@/components/ProGate";
 import { useStore, slugify } from "@/store";
+import { PUBLIC_BASE } from "@/lib/api";
 
 // Interest targeting seeds derived from the real vibe analysis
 const MOOD_INTERESTS: Record<string, string[]> = {
@@ -45,8 +40,11 @@ export default function App() {
   const [budget, setBudget] = useState(10);
   const [copied, setCopied] = useState("");
 
-  const slug = slugify(`${r.artist}-${r.title}`) || "release";
-  const landing = `https://th3circle.app/r/${slug}`;
+  // must match the published fan-page slug (Landing.tsx) — id-suffixed, else ad
+  // clicks 404. Same public base as the rest of the app.
+  const base = slugify(`${r.artist}-${r.title}`) || "release";
+  const slug = r.id ? `${base}-${r.id.slice(0, 6)}` : base;
+  const landing = `${PUBLIC_BASE}/r/${slug}`;
 
   const interests = useMemo(() => {
     const out: string[] = [];
@@ -73,9 +71,11 @@ export default function App() {
   ];
 
   const copyField = async (label: string, value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 1200);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(""), 1200);
+    } catch { /* clipboard unavailable — no-op */ }
   };
 
   return (
@@ -164,13 +164,13 @@ export default function App() {
               <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Launch</div>
               <div className="flex gap-3">
                 <Button
-                  onClick={() => window.open("https://adsmanager.facebook.com/adsmanager/manage/campaigns", "_blank")}
+                  onClick={() => window.open("https://adsmanager.facebook.com/adsmanager/manage/campaigns", "_blank", "noopener,noreferrer")}
                   className="bg-[#1877F2] text-white gap-2"
                 >
                   <ExternalLink className="size-4" />Open Meta Ads Manager
                 </Button>
                 <Button
-                  onClick={() => window.open("https://ads.google.com/aw/campaigns/new", "_blank")}
+                  onClick={() => window.open("https://ads.google.com/aw/campaigns/new", "_blank", "noopener,noreferrer")}
                   variant="ghost"
                   className="border border-white/10 text-neutral-50 gap-2"
                 >

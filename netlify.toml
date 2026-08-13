@@ -1,0 +1,16 @@
+# Netlify build config for the Rollout frontend (Vite SPA).
+#
+# REQUIRED build-time env vars (Netlify UI -> Site settings -> Environment):
+#   VITE_API_BASE    = https://<your-hosted-backend>   # the Python engine's HTTPS URL.
+#                      Without it the build falls back to http://127.0.0.1:8000 and the
+#                      deployed HTTPS site cannot reach the engine (mixed-content block).
+#   VITE_PUBLIC_BASE = https://rollout.th3circle.app    # optional; used for /r/{slug} links.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# The SPA + /r/{slug} public-route fallback lives in public/_redirects
+# (copied into dist/ at build time).

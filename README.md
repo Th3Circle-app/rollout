@@ -23,7 +23,7 @@ subject of the section below on metering.*
 
 ## The parts that were actually hard
 
-Most of this app is ordinary product work. These four are the parts worth reading.
+Most of this app is ordinary product work. These five are the parts worth reading.
 
 ### 1. Making a model hear a song the way its artist does
 
@@ -102,6 +102,38 @@ choice is settled server side.
 
 <br clear="right">
 
+### 5. A red-team loop that improves itself
+
+Every server endpoint takes untrusted input, and a few of them fetch URLs, run
+subprocesses, and decode user images. So the app is hardened by a repeatable
+**two-legged red-team loop**, documented in [`REDTEAM.md`](REDTEAM.md):
+
+- **Static leg** — every changed file is read line by line against a growing
+  checklist (SSRF, resource exhaustion, billing races, error handling).
+- **Runtime leg** — two adversarial suites run for real: a backend suite of
+  ~48 cases (SSRF to metadata IPs, path traversal, injection, malformed bodies,
+  concurrency) and a headless-browser suite that loads every page and fails on an
+  uncaught error or an own-backend 4xx.
+
+The loop's rule is that it **learns**: when a pass finds a new bug class, a
+checklist item and a test are added, so the next pass is sharper than the last.
+It runs until two consecutive rounds find nothing new. Three things it produced:
+
+- **SSRF-safe fetch** (`backend/netguard.py`). Every fetch of a user-influenced
+  URL resolves the host once, rejects private / loopback / link-local / cloud-
+  metadata / CGNAT addresses (including Alibaba's `100.100.100.200`), then
+  connects to that **pinned IP** so DNS can't rebind between the check and the
+  request. Redirects are refused, responses are size-capped, ports are allow-listed.
+- **A Stripe webhook that survives out-of-order delivery.** Stripe delivers
+  at-least-once and can reorder events, so a redelivered "subscription active"
+  arriving after a cancellation would re-grant a paid plan. Every plan write is an
+  **atomic compare-and-set** against a per-row high-water mark (`stripe_event_ts`),
+  so an older event can never overwrite a newer one, even under a delivery race.
+- **Bounded resources.** Every subprocess and fetch has a timeout, every temp
+  directory is cleaned in a `finally`, uploads are swept on a schedule and capped
+  at the stream level (not just a trusted `Content-Length`), and image decoding
+  has a decompression-bomb ceiling.
+
 ---
 
 ## Cost architecture
@@ -141,6 +173,7 @@ src/               React frontend, one screen per lifecycle step
   store.tsx        session, release state, cloud sync, plan gating
 backend/
   server.py        API surface
+  netguard.py      SSRF-safe, IP-pinned outbound fetch (shared by every URL fetch)
   vibe.py          CLAP mood + genre, calibrated
   analyze.py       key / BPM / duration / visual keywords (librosa)
   align.py         demucs + stable-ts forced alignment
@@ -152,6 +185,8 @@ video/             Remotion lyric-video composition
 supabase/          schema, RLS, metering, tiers, Stripe webhook
 tools/             premium-check.mjs, a strict design-system grader
 docs/              architecture and completeness specs
+REDTEAM.md         the self-improving red-team checklist + round log
+DEPLOY.md          ordered go-live checklist
 ```
 
 ## Running it
@@ -173,6 +208,8 @@ laion-clap. First run downloads the CLAP checkpoint, roughly 2 GB.
   flattened composite for inspection
 - `docs/COMPLETENESS-SPEC.md` is the app-furniture checklist (history, empty states,
   onboarding, a11y, meta)
+- `REDTEAM.md` documents the adversarial loop; its two runtime suites drive the backend
+  to a green board (~48 cases) and load every page headless with zero uncaught errors
 
 ## Design contract
 
@@ -184,8 +221,13 @@ decoration. The enforced rules live in `tools/premium-check.mjs`.
 
 ## Status
 
-In active development. The full lifecycle runs end to end: real audio analysis, real cover
-generation and compositing, real forced-aligned lyric videos, real captions, multi-tenant
-auth, and Stripe subscriptions with server-side plan enforcement.
+The full lifecycle runs end to end: real audio analysis, real cover generation and
+compositing, real forced-aligned lyric videos, real captions, multi-tenant auth, and Stripe
+subscriptions with server-side plan enforcement.
+
+Hardened and green. The red-team loop (`REDTEAM.md`) has converged — two consecutive clean
+static rounds on top of green runtime suites (backend 48/48, every page rendering clean).
+Go-live is gated only on payment-processor clearance and standing up the engine host; the
+ordered steps are in `DEPLOY.md`.
 
 Built and maintained by [Harrison C. Songolo](https://xkaii.studio).

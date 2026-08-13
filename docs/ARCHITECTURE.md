@@ -35,6 +35,17 @@ Everything runs locally today: `./start.sh`. The engine host is the ONLY
 piece that needs a paid account at launch; Supabase + Netlify are driven via
 their MCP servers from Claude.
 
+## Security & reliability
+
+- **SSRF-safe fetch:** every server-side fetch of a user-influenced URL goes
+  through `backend/netguard.py` — resolve once, reject private/metadata/CGNAT,
+  connect to the pinned IP (DNS-rebind proof), no redirects, size-capped.
+- **Webhook ordering:** plan writes are an atomic compare-and-set against a
+  per-row high-water mark (`stripe_event_ts`, migration 006), so reordered /
+  redelivered Stripe events can't re-grant a cancelled plan.
+- **Red-team loop:** `REDTEAM.md` + the `redteam/` suites. Runs until two clean
+  rounds; the checklist grows every pass. Converged and green.
+
 ## Non-negotiables
 
 - No deploy without Harrison literally saying "deploy".

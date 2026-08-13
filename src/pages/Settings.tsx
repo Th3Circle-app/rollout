@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useTour } from "@/components/Tour";
 import { useStore, FREE_SONG_LIMIT, PLAN_LABEL } from "@/store";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 // BYO image providers — the artist's key, their bill, our $0.
 // "free" group = the key itself costs nothing (free API tiers).

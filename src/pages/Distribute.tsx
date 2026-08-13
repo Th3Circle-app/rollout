@@ -4,12 +4,6 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Layers,
-  Package,
-  Rocket,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
@@ -70,9 +64,11 @@ export default function App() {
   };
 
   const copyMeta = async (label: string, value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 1200);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(""), 1200);
+    } catch { /* clipboard unavailable — no-op */ }
   };
 
   const dist = DISTRIBUTORS.find((d) => d.key === picked);
@@ -175,7 +171,7 @@ export default function App() {
             <div className="flex items-center gap-3">
               <Button
                 disabled={!dist}
-                onClick={() => dist && window.open(dist.url, "_blank")}
+                onClick={() => dist && window.open(dist.url, "_blank", "noopener,noreferrer")}
                 className="btn-glow text-white gap-2 disabled:opacity-40"
               >
                 <ExternalLink className="size-4" />

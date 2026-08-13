@@ -25,22 +25,43 @@ W, H = 720, 1280
 FPS = 24
 CLIP_SEC = 15.0
 
+# Heavy display font, searched across OSes so the render looks the same on a
+# Linux host as on the dev Mac. On a Docker/Linux box install one of these with
+# `apt-get install -y fonts-liberation fonts-dejavu-core`, or point ROLLOUT_FONT
+# at a bundled .ttf for fully deterministic output.
 FONT_CANDIDATES = [
+    os.environ.get("ROLLOUT_FONT", ""),
+    # macOS
     "/System/Library/Fonts/Supplemental/Arial Black.ttf",
     "/System/Library/Fonts/Supplemental/Impact.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
     "/System/Library/Fonts/SFNS.ttf",
+    # Linux (Debian/Ubuntu — fonts-liberation / fonts-dejavu-core / fonts-noto)
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    # Windows
+    "C:\\Windows\\Fonts\\ariblk.ttf",
+    "C:\\Windows\\Fonts\\impact.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
 ]
 
 
 def _font(size):
     for p in FONT_CANDIDATES:
-        if os.path.exists(p):
+        if p and os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)
             except OSError:
                 continue
-    return ImageFont.load_default()
+    # Pillow >= 10.1 scales the built-in default to a size — far better than the
+    # old tiny bitmap when no system font is present.
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def find_hook(y, sr, clip_sec=CLIP_SEC):
@@ -74,8 +95,8 @@ def chunk_lyrics(lyrics, n_slots):
 def prepare_background(cover_path_or_url):
     """Blurred, darkened square cover scaled for Ken Burns crops."""
     if cover_path_or_url and cover_path_or_url.startswith("http"):
-        req = urllib.request.Request(cover_path_or_url, headers={"User-Agent": "Mozilla/5.0"})
-        raw = urllib.request.urlopen(req, timeout=180).read()
+        from netguard import fetch_url  # IP-pinned, SSRF-safe, size-capped
+        raw = fetch_url(cover_path_or_url, timeout=60)
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     elif cover_path_or_url and os.path.exists(cover_path_or_url):
         img = Image.open(cover_path_or_url).convert("RGB")
@@ -150,8 +171,8 @@ VIDEO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vide
 def _save_cover(cover, dest):
     """Save the cover (URL or path) as a jpg for the Remotion comp."""
     if cover and cover.startswith("http"):
-        req = urllib.request.Request(cover, headers={"User-Agent": "Mozilla/5.0"})
-        raw = urllib.request.urlopen(req, timeout=180).read()
+        from netguard import fetch_url  # IP-pinned, SSRF-safe, size-capped
+        raw = fetch_url(cover, timeout=60)
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     elif cover and os.path.exists(cover):
         img = Image.open(cover).convert("RGB")
@@ -330,15 +351,19 @@ def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path):
     import soundfile as sf
     sf.write(clip_wav, clip, sr)
 
-    subprocess.run(
-        [
-            "ffmpeg", "-y",
-            "-framerate", str(FPS), "-i", os.path.join(tmpdir, "f%05d.jpg"),
-            "-i", clip_wav,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
-            "-c:a", "aac", "-b:a", "192k", "-shortest",
-            out_path,
-        ],
-        check=True, capture_output=True,
-    )
-    return {"hook_start": round(start, 1), "bpm": round(float(np.atleast_1d(tempo)[0])), "chunks": len(chunks)}
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-framerate", str(FPS), "-i", os.path.join(tmpdir, "f%05d.jpg"),
+                "-i", clip_wav,
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+                "-c:a", "aac", "-b:a", "192k", "-shortest",
+                out_path,
+            ],
+            check=True, capture_output=True, timeout=600,  # never hang the worker
+        )
+        return {"hook_start": round(start, 1), "bpm": round(float(np.atleast_1d(tempo)[0])), "chunks": len(chunks)}
+    finally:
+        import shutil as _sh
+        _sh.rmtree(tmpdir, ignore_errors=True)  # never leak the frame dir

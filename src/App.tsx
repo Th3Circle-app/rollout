@@ -15,6 +15,26 @@ import Sidebar from "./components/Sidebar";
 import UpgradeModal from "./components/UpgradeModal";
 import { TourProvider } from "./components/Tour";
 import { StoreProvider, useStore } from "./store";
+import FanPage from "./pages/FanPage";
+import GlassBackground from "./components/GlassBackground";
+import RolloutLanding from "./components/RolloutLanding";
+import ErrorBoundary from "./components/ErrorBoundary";
+
+// Fallback when a page component throws — recover instead of blanking the app.
+function PageError() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-8 text-center">
+      <h1 className="text-2xl font-bold tracking-tight text-[#F2F0F7]">Something went wrong on this screen.</h1>
+      <p className="max-w-sm text-sm text-[#9A96AD]">Give it another go, or head back to your releases.</p>
+      <button
+        onClick={() => { window.location.search = "?page=Dashboard"; }}
+        className="rounded-xl bg-violet-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#7c4dec]"
+      >
+        Back to Releases
+      </button>
+    </div>
+  );
+}
 
 // Per-screen document titles — real products name their tabs.
 const TITLES: Record<string, string> = {
@@ -50,6 +70,7 @@ const PAGES: Record<string, React.ComponentType> = {
 function Shell() {
   const { page, cloud, session } = useStore();
   const Current = PAGES[page] ?? Import;
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     document.title = `${TITLES[page] ?? "Rollout"} · Rollout`;
@@ -66,9 +87,11 @@ function Shell() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // multi-tenant: cloud mode requires an account
+  // logged out: the marketing landing is the front door; "Start free" opens the
+  // auth wall. (The landing is responsive and shows on phones too — only the
+  // studio itself is desktop-gated below.)
   if (cloud && !session) {
-    return <Auth />;
+    return showAuth ? <Auth onBack={() => setShowAuth(false)} /> : <RolloutLanding onStart={() => setShowAuth(true)} />;
   }
 
   if (tooSmall) {
@@ -88,17 +111,28 @@ function Shell() {
   }
 
   return (
-    <div className="app-bg flex min-h-screen text-neutral-50">
-      <Sidebar />
-      <main key={page} className="page-enter min-w-0 flex-1">
-        <Current />
-      </main>
+    <div className="app-bg relative flex min-h-screen text-neutral-50">
+      <GlassBackground style={{ opacity: 0.45 }} />
+      <div className="relative z-10 flex min-h-screen w-full">
+        <Sidebar />
+        <main key={page} className="page-enter min-w-0 flex-1">
+          <ErrorBoundary fallback={<PageError />}>
+            <Current />
+          </ErrorBoundary>
+        </main>
+      </div>
       <UpgradeModal />
     </div>
   );
 }
 
 export default function App() {
+  // Public release pages (/r/{slug}) are unauthenticated and bypass the whole
+  // app shell, auth wall, and desktop gate — fans land here from a smart link.
+  if (typeof window !== "undefined") {
+    const m = window.location.pathname.match(/^\/r\/([^/]+)\/?$/);
+    if (m) return <FanPage slug={decodeURIComponent(m[1])} />;
+  }
   return (
     <StoreProvider>
       <TourProvider>

@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calendar,
   Check,
   Copy,
-  Layers,
   Link2,
   Loader2,
   Lock,
-  Package,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 type Caption = {
   id: string;
@@ -98,7 +92,7 @@ export default function App() {
         }),
       })
         .then((res) => res.json())
-        .then((j) => { if (!dead) setCaps(j.captions); })
+        .then((j) => { if (!dead) setCaps(Array.isArray(j.captions) ? j.captions : []); })
         .catch(() => { if (!dead) setErr("Caption engine offline — start the backend."); })
         .finally(() => { if (!dead) setLoading(false); });
     }, 400);
@@ -111,12 +105,16 @@ export default function App() {
       openUpgrade("Copy captions to clipboard");
       return;
     }
-    await navigator.clipboard.writeText(c.text);
-    setCopiedId(c.id);
-    setTimeout(() => setCopiedId(""), 1400);
+    try {
+      await navigator.clipboard.writeText(c.text);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId(""), 1400);
+    } catch { /* clipboard unavailable */ }
   };
 
-  // One-click publishing hand-off: caption to clipboard, platform opens.
+  // Hand-off: copy the caption to the clipboard and open the platform's
+  // composer so you paste and post. X pre-fills the text via its intent URL;
+  // the others open the upload screen (no platform offers public auto-posting).
   const SOCIALS: { key: string; label: string; url: (text: string) => string }[] = [
     { key: "tiktok", label: "TikTok", url: () => "https://www.tiktok.com/tiktokstudio/upload" },
     { key: "ig", label: "Reels", url: () => "https://www.instagram.com/" },
@@ -126,13 +124,15 @@ export default function App() {
 
   const handOff = async (c: Caption, s: (typeof SOCIALS)[number]) => {
     if (plan === "free") {
-      openUpgrade("One-click posting to your socials");
+      openUpgrade("Copy captions and jump straight to your socials");
       return;
     }
-    await navigator.clipboard.writeText(c.text);
-    setCopiedId(c.id);
-    setTimeout(() => setCopiedId(""), 1400);
-    window.open(s.url(c.text), "_blank");
+    try {
+      await navigator.clipboard.writeText(c.text);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId(""), 1400);
+    } catch { /* clipboard blocked — still open the composer below */ }
+    window.open(s.url(c.text), "_blank", "noopener,noreferrer");
   };
 
   const sorted = [...caps].sort(
@@ -223,9 +223,9 @@ export default function App() {
                       </span>
                     ))}
                   </p>
-                  {/* one-click hand-off: copies caption, opens the platform */}
+                  {/* hand-off: copies the caption, opens the platform composer */}
                   <div className="mt-3 flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#5e5a72]">Post to</span>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#5e5a72]">Copy + open</span>
                     {SOCIALS.map((s) => (
                       <button
                         key={s.key}

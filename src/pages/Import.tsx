@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import {
-  ArrowRight, AudioLines, FileText, Layers, Package, Settings, Upload, X, Zap, Loader2,
+  ArrowRight, AudioLines, FileText, Upload, X, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, deriveTitleArtist, FREE_SONG_LIMIT } from "@/store";
 import { supabase } from "@/lib/supabase";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 type Result = {
   filename: string; key: string; bpm: number; duration: string;
@@ -23,24 +23,16 @@ export default function App() {
   const [err, setErr] = useState("");
   const [lyrics, setLyrics] = useState("");
 
+  const overLimitMsg =
+    FREE_SONG_LIMIT === 1
+      ? "Your free song is used — unlock unlimited releases"
+      : `Your ${FREE_SONG_LIMIT} free songs are used — unlock unlimited releases`;
+
   async function handleFile(f: File) {
-    // Cloud mode: the SERVER meters free slots (client can't cheat).
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.rpc("rollout_consume_song_slot", { fname: f.name });
-        if (!error && data && data.ok === false) {
-          openUpgrade("Your free song is used — unlock unlimited releases");
-          return;
-        }
-      } catch { /* engine of record unavailable — fall through to local gate */ }
-    }
-    // Local-mode gate (and belt-and-suspenders alongside cloud)
+    // Cheap pre-gate: an obviously over-limit free user gets the upsell before
+    // we spend an analysis. (Server RPC below is the authoritative consume.)
     if (plan === "free" && songsUsed >= FREE_SONG_LIMIT) {
-      openUpgrade(
-        FREE_SONG_LIMIT === 1
-          ? "Your free song is used — unlock unlimited releases"
-          : `Your ${FREE_SONG_LIMIT} free songs are used — unlock unlimited releases`
-      );
+      openUpgrade(overLimitMsg);
       return;
     }
     setName(f.name);
@@ -53,7 +45,16 @@ export default function App() {
       if (!r.ok) throw new Error("Analysis failed");
       setResult(await r.json());
       setStatus("done");
-      useSongSlot(f.name); // burn a free slot only on success
+      // Consume the slot ONLY after a successful analysis, so a transient
+      // backend failure never permanently burns the user's free song. The
+      // server RPC is authoritative (idempotent per filename); local mirrors it.
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.rpc("rollout_consume_song_slot", { fname: f.name });
+          if (!error && data && data.ok === false) openUpgrade(overLimitMsg);
+        } catch { /* server unreachable — local gate already applied */ }
+      }
+      useSongSlot(f.name);
     } catch (e: any) {
       setErr(e?.message || "Could not reach the analyzer");
       setStatus("error");
@@ -218,6 +219,8 @@ export default function App() {
                   // lyrics refine the vibe (fast — audio embedding is cached)
                   if (lyrics.trim() && result.file_id) {
                     try {
+                      const ctrl = new AbortController();
+                      const to = setTimeout(() => ctrl.abort(), 8000); // don't stall navigation
                       const res = await fetch(`${API}/revibe`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -226,10 +229,12 @@ export default function App() {
                           mode: result.key.toLowerCase().includes("minor") ? "minor" : "major",
                           bpm: result.bpm,
                         }),
+                        signal: ctrl.signal,
                       });
+                      clearTimeout(to);
                       if (res.ok) {
                         const v = await res.json();
-                        refined = { ...result, moods: v.moods, genre: v.genre };
+                        refined = { ...result, moods: Array.isArray(v.moods) ? v.moods : result.moods, genre: v.genre ?? result.genre };
                       }
                     } catch { /* keep original read */ }
                   }

@@ -1,10 +1,17 @@
 """Rollout backend: vibe analysis, cover upscale, captions."""
-import os, io, shutil, tempfile, urllib.request
-from fastapi import FastAPI, UploadFile, File, Form
+import os, io, re, shutil, socket, tempfile, ipaddress, urllib.request
+import time as _time
+from urllib.parse import urlparse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
 from PIL import Image
+# Cap decoded pixel count so a crafted small file (tiny bytes, huge dimensions)
+# can't allocate a giant bitmap and OOM the worker. PIL raises
+# DecompressionBombError past 2x this; the image handlers catch it as a 4xx.
+Image.MAX_IMAGE_PIXELS = 50_000_000  # ~50 MP (7000x7000)
 from analyze import analyze
 from captions import generate_captions
 
@@ -15,6 +22,73 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── SSRF-safe fetch (IP-pinned, DNS-rebinding proof) — shared in netguard.py ──
+from netguard import assert_public_url as _assert_public_url, fetch_url as _fetch_url
+
+
+# ── reject oversized request bodies before they hit memory ──
+class _BodySizeLimit(BaseHTTPMiddleware):
+    MAX = 40 * 1024 * 1024  # 40 MB
+
+    async def dispatch(self, request, call_next):
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > self.MAX:
+            return Response(status_code=413, content=b"request too large", media_type="text/plain")
+        return await call_next(request)
+
+
+app.add_middleware(_BodySizeLimit)
+
+
+def _copy_capped(src, dst, max_bytes: int = _BodySizeLimit.MAX) -> None:
+    """Stream-copy an upload with a hard byte ceiling. The Content-Length
+    middleware only catches requests that DECLARE their size; a chunked /
+    Content-Length-omitted body bypasses it, so enforce the cap here on the
+    actual bytes to stop a disk-fill upload."""
+    written = 0
+    while True:
+        chunk = src.read(1024 * 1024)
+        if not chunk:
+            break
+        written += len(chunk)
+        if written > max_bytes:
+            raise HTTPException(status_code=413, detail="upload too large")
+        dst.write(chunk)
+
+
+# ── periodic uploads cleanup so the disk doesn't grow forever ──
+def _sweep_uploads(max_age_h: int = 24) -> None:
+    # recurse so sub-caches (uploads/broll, hook clips) are capped too, not just
+    # top-level files
+    now = _time.time()
+    for root, _dirs, files in os.walk(UPLOADS):
+        for name in files:
+            fp = os.path.join(root, name)
+            try:
+                if now - os.path.getmtime(fp) > max_age_h * 3600:
+                    os.remove(fp)
+            except OSError:
+                pass
+
+
+@app.on_event("startup")
+def _startup_sweep() -> None:
+    _sweep_uploads()
+    # keep sweeping on a background thread; a long-lived process would otherwise
+    # only ever clean up once, at boot, and let temp files accumulate unbounded
+    import threading
+
+    def _periodic() -> None:
+        while True:
+            _time.sleep(3600)
+            try:
+                _sweep_uploads()
+            except Exception:
+                pass
+
+    threading.Thread(target=_periodic, daemon=True).start()
 
 @app.get("/health")
 def health():
@@ -31,14 +105,17 @@ class UpscaleReq(BaseModel):
 @app.post("/upscale")
 def upscale(req: UpscaleReq):
     """Fetch a generated cover and LANCZOS-upscale it to a real delivery size."""
-    if req.b64:
-        import base64 as _b64
-        raw = _b64.b64decode(req.b64)
-    else:
-        r = urllib.request.Request(req.url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(r, timeout=180) as resp:
-            raw = resp.read()
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    try:
+        if req.b64:
+            import base64 as _b64
+            raw = _b64.b64decode(req.b64)
+        elif req.url:
+            raw = _fetch_url(req.url)
+        else:
+            return Response(status_code=400, content=b"provide b64 or url", media_type="text/plain")
+        img = Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as e:
+        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
     size = max(512, min(int(req.size), 4000))
     img = img.resize((size, size), Image.LANCZOS)
     out = io.BytesIO()
@@ -93,6 +170,12 @@ def genimage(req: GenImageReq):
     per-request; nothing is stored."""
     from genimage import generate, platform_key
     key = req.key
+    # BYO custom provider posts to a user-supplied base_url — SSRF-guard it.
+    if req.provider == "custom" and req.base_url:
+        try:
+            _assert_public_url(req.base_url)
+        except Exception as e:
+            return Response(status_code=400, content=(f"bad base_url: {e}")[:200].encode(), media_type="text/plain")
     if req.provider == "platform":
         key = platform_key()
         if not key:
@@ -119,8 +202,9 @@ class ReVibeReq(BaseModel):
 def revibe(req: ReVibeReq):
     """Refine the vibe with lyrics — fast (audio embedding is cached)."""
     from vibe import listen
-    src = os.path.join(UPLOADS, os.path.basename(req.file_id))
-    if not os.path.exists(src):
+    base = os.path.basename(req.file_id or "")
+    src = os.path.join(UPLOADS, base)
+    if not base or not os.path.isfile(src):
         return Response(status_code=404, content=b"unknown file_id")
     r = listen(src, mode=req.mode, bpm=req.bpm, lyrics=req.lyrics,
                cache_key=req.file_id)
@@ -134,22 +218,30 @@ class DetectReq(BaseModel):
 
 
 def _hook_clip_path(file_id: str):
-    """Cut (and cache) the hook window of an uploaded track."""
-    import librosa, soundfile as sf
+    """Cut (and cache) the hook window of an uploaded track. Returns (None, 0.0)
+    for a missing/undecodable/crafted file_id so callers can 404 cleanly."""
+    import librosa, soundfile as sf, json as _json
     from lyricvideo import find_hook, CLIP_SEC
-    src = os.path.join(UPLOADS, os.path.basename(file_id))
-    if not os.path.exists(src):
+    base = os.path.basename(file_id or "")
+    if not base:
         return None, 0.0
-    clip_path = os.path.join(UPLOADS, f"hook_{os.path.basename(file_id)}.wav")
+    src = os.path.join(UPLOADS, base)
+    if not os.path.isfile(src):  # isfile() also rejects a dir-resolving file_id
+        return None, 0.0
+    clip_path = os.path.join(UPLOADS, f"hook_{base}.wav")
     meta_path = clip_path + ".json"
-    import json as _json
-    if os.path.exists(clip_path) and os.path.exists(meta_path):
-        return clip_path, _json.load(open(meta_path))["hook_start"]
-    y, sr = librosa.load(src, mono=True, sr=44100)
-    start = find_hook(y, sr)
-    sf.write(clip_path, y[int(start * sr): int((start + CLIP_SEC) * sr)], sr)
-    _json.dump({"hook_start": round(start, 2)}, open(meta_path, "w"))
-    return clip_path, round(start, 2)
+    try:
+        if os.path.exists(clip_path) and os.path.exists(meta_path):
+            with open(meta_path) as mf:
+                return clip_path, _json.load(mf)["hook_start"]
+        y, sr = librosa.load(src, mono=True, sr=44100)
+        start = find_hook(y, sr)
+        sf.write(clip_path, y[int(start * sr): int((start + CLIP_SEC) * sr)], sr)
+        with open(meta_path, "w") as mf:
+            _json.dump({"hook_start": round(start, 2)}, mf)
+        return clip_path, round(start, 2)
+    except Exception:
+        return None, 0.0
 
 
 @app.post("/detectlyrics")
@@ -160,7 +252,10 @@ def detectlyrics(req: DetectReq):
     clip, hook_start = _hook_clip_path(req.file_id)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
-    return {"hook_start": hook_start, "words": detect_words(clip)}
+    try:
+        return {"hook_start": hook_start, "words": detect_words(clip)}
+    except Exception as e:
+        return Response(status_code=422, content=(f"detection failed: {e}")[:200].encode(), media_type="text/plain")
 
 
 @app.get("/hookclip/{file_id}")
@@ -169,8 +264,11 @@ def hookclip(file_id: str):
     clip, _ = _hook_clip_path(file_id)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
-    with open(clip, "rb") as f:
-        return Response(content=f.read(), media_type="audio/wav")
+    try:
+        with open(clip, "rb") as f:
+            return Response(content=f.read(), media_type="audio/wav")
+    except OSError:
+        return Response(status_code=404, content=b"clip unavailable")
 
 
 class CorrectReq(BaseModel):
@@ -182,7 +280,10 @@ class CorrectReq(BaseModel):
 def correctwords(req: CorrectReq):
     """Map the artist's pasted lyrics onto the detected timing."""
     from align import correct_words
-    return {"words": correct_words(req.words, req.lyrics)}
+    try:
+        return {"words": correct_words(req.words, req.lyrics)}
+    except Exception as e:
+        return Response(status_code=422, content=(f"bad words payload: {e}")[:200].encode(), media_type="text/plain")
 
 
 class RemoveBgReq(BaseModel):
@@ -198,17 +299,27 @@ def removebg(req: RemoveBgReq):
     """Cut the background off an image -> transparent PNG subject layer.
     Takes a generated-image URL or a user photo as base64."""
     global _REMBG_SESSION
-    from rembg import remove, new_session
-    if _REMBG_SESSION is None:
-        _REMBG_SESSION = new_session("isnet-general-use")
-    if req.b64:
-        import base64 as _b64
-        raw = _b64.b64decode(req.b64)
-    else:
-        r = urllib.request.Request(req.url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(r, timeout=180) as resp:
-            raw = resp.read()
-    out = remove(raw, session=_REMBG_SESSION)
+    # validate cheaply BEFORE the heavy rembg import / ONNX model load, so a bad
+    # request (no input, non-image bytes, blocked URL) returns fast instead of
+    # paying a multi-second cold model load only to 400.
+    if not req.b64 and not req.url:
+        return Response(status_code=400, content=b"provide b64 or url", media_type="text/plain")
+    try:
+        if req.b64:
+            import base64 as _b64
+            raw = _b64.b64decode(req.b64)
+        else:
+            raw = _fetch_url(req.url)
+        Image.open(io.BytesIO(raw)).verify()  # reject non-images without loading rembg
+    except Exception as e:
+        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
+    try:
+        from rembg import remove, new_session
+        if _REMBG_SESSION is None:
+            _REMBG_SESSION = new_session("isnet-general-use")
+        out = remove(raw, session=_REMBG_SESSION)
+    except Exception as e:
+        return Response(status_code=500, content=(f"background removal failed: {e}")[:200].encode(), media_type="text/plain")
     return Response(content=out, media_type="image/png")
 
 
@@ -221,7 +332,10 @@ def photoessence(req: EssenceReq):
     """Extract the essence of a user photo: dominant palette + character words.
     Feeds 'Inspired by' mode — new art that FEELS like their photo."""
     import base64 as _b64
-    img = Image.open(io.BytesIO(_b64.b64decode(req.b64))).convert("RGB")
+    try:
+        img = Image.open(io.BytesIO(_b64.b64decode(req.b64))).convert("RGB")
+    except Exception as e:
+        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
     img.thumbnail((200, 200))
     # dominant colors via adaptive quantization
     pal_img = img.quantize(colors=5, method=Image.Quantize.FASTOCTREE)
@@ -261,7 +375,7 @@ def captions(req: CaptionReq):
 
 
 @app.post("/lyricvideo")
-async def lyric_video(
+def lyric_video(
     lyrics: str = Form(...),
     title: str = Form(""),
     artist: str = Form(""),
@@ -273,24 +387,36 @@ async def lyric_video(
     style: str = Form(""),
     file: UploadFile | None = File(None),
 ):
-    """Render a 15s kinetic lyric video from the hook of the track."""
-    from lyricvideo import make_lyric_video
+    """Render a 15s kinetic lyric video from the hook of the track. Plain def so
+    the long ffmpeg/Remotion render runs in the threadpool, not the event loop."""
+    from lyricvideo import make_lyric_video, make_lyric_video_premium
 
+    audio_is_temp = False
     if file is not None and file.filename:
         suffix = os.path.splitext(file.filename)[1] or ".wav"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            shutil.copyfileobj(file.file, tmp)
+            try:
+                _copy_capped(file.file, tmp)
+            except HTTPException:
+                try: os.remove(tmp.name)
+                except OSError: pass
+                raise
             audio_path = tmp.name
+        audio_is_temp = True
     elif file_id:
         audio_path = os.path.join(UPLOADS, os.path.basename(file_id))
-        if not os.path.exists(audio_path):
+        if not os.path.isfile(audio_path):
             return Response(status_code=404, content=b"unknown file_id")
     else:
         return Response(status_code=400, content=b"no audio provided")
 
-    out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
-    # Premium engine first (aligned words + Remotion); beat-grid fallback.
-    from lyricvideo import make_lyric_video_premium
+    # SSRF-guard a user-supplied cover URL; ignore it if it isn't public.
+    if cover_url:
+        try:
+            _assert_public_url(cover_url)
+        except Exception:
+            cover_url = ""
+
     words_override = None
     if words_json:
         import json as _json
@@ -298,16 +424,30 @@ async def lyric_video(
             words_override = _json.loads(words_json)
         except Exception:
             words_override = None
+
+    out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
     try:
-        meta = make_lyric_video_premium(
-            audio_path, lyrics, cover_url, title, artist, out, words_override,
-            bg=bg, moods=[m for m in moods.split(",") if m], style=style)
+        # Premium engine first (aligned words + Remotion); beat-grid fallback.
+        try:
+            meta = make_lyric_video_premium(
+                audio_path, lyrics, cover_url, title, artist, out, words_override,
+                bg=bg, moods=[m for m in moods.split(",") if m], style=style)
+        except Exception as e:
+            print("premium engine fell back:", e)
+            meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out)
+        with open(out, "rb") as f:
+            data = f.read()
     except Exception as e:
-        print("premium engine fell back:", e)
-        meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out)
-    with open(out, "rb") as f:
-        data = f.read()
-    os.unlink(out)
+        return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
+    finally:
+        for p in ([out] + ([audio_path] if audio_is_temp else [])):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    # ASCII/latin-1-safe filename so a non-Latin title can't 500 the header
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", (title or "clip")).strip("-") or "clip"
     return Response(
         content=data,
         media_type="video/mp4",
@@ -315,7 +455,7 @@ async def lyric_video(
             "X-Hook-Start": str(meta["hook_start"]),
             "X-Bpm": str(meta["bpm"]),
             "X-Engine": meta.get("engine", "classic"),
-            "Content-Disposition": f'attachment; filename="{(title or "clip").replace(" ", "-")}-lyric.mp4"',
+            "Content-Disposition": f'attachment; filename="{safe_name}-lyric.mp4"',
         },
     )
 
@@ -324,15 +464,30 @@ os.makedirs(UPLOADS, exist_ok=True)
 
 
 @app.post("/analyze")
-async def do_analyze(file: UploadFile = File(...), lyrics: str = Form("")):
+def do_analyze(file: UploadFile = File(...), lyrics: str = Form("")):
+    # plain def -> runs in the threadpool; librosa/CLAP won't block the loop
     suffix = os.path.splitext(file.filename or "")[1] or ".wav"
     # Keep the audio so the lyric-video engine can cut clips from it later.
     import uuid as _uuid
     file_id = _uuid.uuid4().hex[:12] + suffix
     path = os.path.join(UPLOADS, file_id)
-    with open(path, "wb") as out:
-        shutil.copyfileobj(file.file, out)
-    result = analyze(path, lyrics=lyrics, cache_key=file_id)
+    try:
+        with open(path, "wb") as out:
+            _copy_capped(file.file, out)
+    except HTTPException:
+        try: os.remove(path)
+        except OSError: pass
+        raise
+    if os.path.getsize(path) == 0:
+        try: os.remove(path)
+        except OSError: pass
+        return Response(status_code=400, content=b"empty audio file", media_type="text/plain")
+    try:
+        result = analyze(path, lyrics=lyrics, cache_key=file_id)
+    except Exception as e:
+        try: os.remove(path)
+        except OSError: pass
+        return Response(status_code=422, content=(f"could not read audio: {e}")[:280].encode(), media_type="text/plain")
     result["filename"] = file.filename
     result["file_id"] = file_id
     return result

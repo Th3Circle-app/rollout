@@ -52,7 +52,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .page-enter,
   .animate-spin,
-  .animate-pulse {
+  .animate-pulse,
+  .rise,
+  .rise-2,
+  .rise-3 {
     animation: none !important;
   }
   * {
@@ -79,20 +82,100 @@ body {
    primary actions. No gradients, no glow. Color is a signal, not decoration. */
 .btn-glow {
   background: #8b5cf6;
+  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.55);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s,
+    background 0.2s;
 }
 .btn-glow:hover {
   background: #7c4dec;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px -10px rgba(139, 92, 246, 0.75);
 }
 
-/* surface card — flat per the original export */
+/* frosted glass surface — sits over the WebGL depth background */
 .glass {
-  background: #15151c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(21, 21, 28, 0.55);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* flat app background — #0B0B0F everywhere, no ambient gradients */
+/* transparent so the fixed WebGL glass background shows through the studio */
 .app-bg {
-  background: #0b0b0f;
+  background: transparent;
+}
+
+/* cinematic entrance — staggered rise for glass panels/heroes */
+@keyframes rollout-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.rise {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-2 {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+.rise-3 {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+/* scroll-triggered reveal — cinematic soft focus-in: each section rises,
+   settles from a slight scale, and sharpens from a blur as it enters view */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px) scale(0.965);
+  filter: blur(8px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform, filter;
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* kinetic hero headline — words rise + unskew in, staggered via --i */
+@keyframes rollout-word {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em) rotate(2.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+.kinetic-word {
+  display: inline-block;
+  animation: rollout-word 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i) * 0.085s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+  .kinetic-word {
+    animation: none;
+  }
 }
 
 .font-sans {
@@ -111,6 +194,77 @@ body {
   font-family:
     "Source Serif 4", "Inter", ui-serif, Georgia, Cambria, "Times New Roman",
     Times, serif;
+}
+
+/* ── premium polish ─────────────────────────────────────────────────────── */
+
+/* film grain — a fixed, near-invisible texture that ties the whole page
+   together the way grain does on a graded photo. Above content, ignores clicks. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* thin scroll-progress line pinned to the very top */
+.scroll-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 70;
+  background: linear-gradient(90deg, #7c4dec, #b794ff);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
+}
+
+/* 3D tilt — cards lean toward the cursor */
+.tilt {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* premium card: hover lift + violet edge glow */
+.card-premium {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.35s;
+}
+.card-premium:hover {
+  border-color: rgba(139, 92, 246, 0.42);
+  box-shadow:
+    0 30px 70px -24px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(139, 92, 246, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* hairline violet gradient edge for glass panels (premium detail) */
+.glass-edge {
+  position: relative;
+}
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(139, 92, 246, 0.5), rgba(255, 255, 255, 0.06) 42%, transparent 72%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt {
+    transform: none !important;
+  }
 }
 
 @theme inline {

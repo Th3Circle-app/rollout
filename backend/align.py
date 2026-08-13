@@ -13,6 +13,7 @@ swapped in; total fail -> caller keeps its beat-grid fallback.
 import difflib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -76,31 +77,36 @@ def detect_words(hook_wav):
     """Transcribe the isolated vocal -> [{word,start,end,conf}] with timing
     snapped to actual voiced audio. This is the auto-lyrics path the user
     can then correct in the editor."""
+    outdir = None
     try:
-        vocals = isolate_vocals(hook_wav)
+        vocals, outdir = isolate_vocals(hook_wav)
     except Exception:
-        vocals = hook_wav
-    model = _model()
-    res = model.transcribe(vocals, **TRANSCRIBE_OPTS)
-    # snap word edges to silence for exact trigger timing
+        vocals = hook_wav  # transcribe the mix if separation dies
     try:
-        res = res.adjust_by_silence(vocals)
-    except Exception:
-        pass
-    out = []
-    for seg in res.segments:
-        for w in seg.words:
-            word = w.word.strip().strip(",.!?").strip()
-            if word and w.end > w.start:
-                out.append({
-                    "word": word,
-                    "start": round(float(w.start), 3),
-                    "end": round(float(w.end), 3),
-                    "conf": round(float(getattr(w, "probability", 0) or 0), 2),
-                })
-    if _is_hallucination(out):
-        return []
-    return out
+        model = _model()
+        res = model.transcribe(vocals, **TRANSCRIBE_OPTS)
+        # snap word edges to silence for exact trigger timing
+        try:
+            res = res.adjust_by_silence(vocals)
+        except Exception:
+            pass
+        out = []
+        for seg in res.segments:
+            for w in seg.words:
+                word = w.word.strip().strip(",.!?").strip()
+                if word and w.end > w.start:
+                    out.append({
+                        "word": word,
+                        "start": round(float(w.start), 3),
+                        "end": round(float(w.end), 3),
+                        "conf": round(float(getattr(w, "probability", 0) or 0), 2),
+                    })
+        if _is_hallucination(out):
+            return []
+        return out
+    finally:
+        if outdir:
+            shutil.rmtree(outdir, ignore_errors=True)
 
 
 def correct_words(words, lyrics):
@@ -129,17 +135,25 @@ def _norm(w):
 
 
 def isolate_vocals(wav_path):
-    """Run demucs two-stem separation; return path to vocals.wav."""
+    """Run demucs two-stem separation; return (vocals_path, outdir).
+    The stems are large (~10 MB/call) and land in the system tempdir, which the
+    app's uploads sweep does NOT walk, so the CALLER MUST rmtree(outdir) when
+    done. On any failure this cleans up itself and raises (caller gets no dir)."""
     outdir = tempfile.mkdtemp(prefix="rollout_sep_")
-    r = subprocess.run(
-        [sys.executable, "-m", "demucs.separate", "--two-stems=vocals",
-         "-n", "htdemucs", "-o", outdir, wav_path],
-        capture_output=True, text=True,
-    )
+    try:
+        r = subprocess.run(
+            [sys.executable, "-m", "demucs.separate", "--two-stems=vocals",
+             "-n", "htdemucs", "-o", outdir, wav_path],
+            capture_output=True, text=True, timeout=300,  # never hang the worker
+        )
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(outdir, ignore_errors=True)
+        raise RuntimeError("demucs timed out")
     if r.returncode != 0:
+        shutil.rmtree(outdir, ignore_errors=True)
         raise RuntimeError("demucs failed: " + r.stderr[-200:])
     base = os.path.splitext(os.path.basename(wav_path))[0]
-    return os.path.join(outdir, "htdemucs", base, "vocals.wav")
+    return os.path.join(outdir, "htdemucs", base, "vocals.wav"), outdir
 
 
 def locate_fragment(transcribed_words, full_lyrics, pad=4):
@@ -166,54 +180,59 @@ def locate_fragment(transcribed_words, full_lyrics, pad=4):
 
 def align_hook(hook_wav, full_lyrics):
     """Return [{word, start, end}, ...] for the hook clip, or [] on failure."""
+    outdir = None
     try:
-        vocals = isolate_vocals(hook_wav)
+        vocals, outdir = isolate_vocals(hook_wav)
     except Exception:
         vocals = hook_wav  # align against the mix if separation dies
 
-    model = _model()
     try:
-        tr = model.transcribe(vocals, **TRANSCRIBE_OPTS)
+        model = _model()
         try:
-            tr = tr.adjust_by_silence(vocals)
+            tr = model.transcribe(vocals, **TRANSCRIBE_OPTS)
+            try:
+                tr = tr.adjust_by_silence(vocals)
+            except Exception:
+                pass
+            t_words = [w for seg in tr.segments for w in seg.words]
         except Exception:
-            pass
-        t_words = [w for seg in tr.segments for w in seg.words]
-    except Exception:
-        t_words = []
+            t_words = []
 
-    fragment = locate_fragment([w.word for w in t_words], full_lyrics)
+        fragment = locate_fragment([w.word for w in t_words], full_lyrics)
 
-    # Force-align the true fragment for clean timing
-    if fragment:
-        try:
-            aligned = model.align(vocals, " ".join(fragment), language="en",
-                                  original_split=False, verbose=None)
+        # Force-align the true fragment for clean timing
+        if fragment:
+            try:
+                aligned = model.align(vocals, " ".join(fragment), language="en",
+                                      original_split=False, verbose=None)
+                out = []
+                for seg in aligned.segments:
+                    for w in seg.words:
+                        word = w.word.strip()
+                        if word and w.end > w.start:
+                            out.append({"word": word, "start": float(w.start), "end": float(w.end)})
+                if len(out) >= 3:
+                    return out
+            except Exception:
+                pass
+
+        # Fallback: transcribed timing, true words swapped in where matched
+        if t_words:
             out = []
-            for seg in aligned.segments:
-                for w in seg.words:
-                    word = w.word.strip()
-                    if word and w.end > w.start:
-                        out.append({"word": word, "start": float(w.start), "end": float(w.end)})
+            frag_norm = [_norm(w) for w in fragment]
+            for w in t_words:
+                word = w.word.strip()
+                n = _norm(word)
+                if frag_norm:
+                    close = difflib.get_close_matches(n, frag_norm, n=1, cutoff=0.75)
+                    if close:
+                        idx = frag_norm.index(close[0])
+                        word = fragment[idx]
+                if word and w.end > w.start:
+                    out.append({"word": word, "start": float(w.start), "end": float(w.end)})
             if len(out) >= 3:
                 return out
-        except Exception:
-            pass
-
-    # Fallback: transcribed timing, true words swapped in where matched
-    if t_words:
-        out = []
-        frag_norm = [_norm(w) for w in fragment]
-        for w in t_words:
-            word = w.word.strip()
-            n = _norm(word)
-            if frag_norm:
-                close = difflib.get_close_matches(n, frag_norm, n=1, cutoff=0.75)
-                if close:
-                    idx = frag_norm.index(close[0])
-                    word = fragment[idx]
-            if word and w.end > w.start:
-                out.append({"word": word, "start": float(w.start), "end": float(w.end)})
-        if len(out) >= 3:
-            return out
-    return []
+        return []
+    finally:
+        if outdir:
+            shutil.rmtree(outdir, ignore_errors=True)

@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import ProGate from "@/components/ProGate";
 import { useStore } from "@/store";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 type Word = { word: string; start: number; end: number; conf?: number };
 
@@ -69,9 +69,10 @@ export default function App() {
       });
       if (!res.ok) throw new Error("detection failed");
       const j = await res.json();
+      const ws = Array.isArray(j.words) ? j.words : [];
       setHookStart(j.hook_start);
-      setWords(j.words);
-      if (!j.words.length) setDetectErr("Couldn't hear clear words in the hook — paste your lyrics below instead.");
+      setWords(ws);
+      if (!ws.length) setDetectErr("Couldn't hear clear words in the hook — paste your lyrics below instead.");
     } catch {
       setDetectErr("Detection failed — is the engine running?");
     } finally {
@@ -88,7 +89,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ words, lyrics }),
       });
-      if (res.ok) setWords((await res.json()).words);
+      if (res.ok) { const jj = await res.json(); setWords(Array.isArray(jj.words) ? jj.words : words); }
     } catch {
       /* keep current words */
     }

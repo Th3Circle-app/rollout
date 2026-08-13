@@ -28,8 +28,9 @@ export default function App() {
     moods: [], keywords: [], coverUrl: "", lyrics: "",
   };
   const cd = useCountdown(releaseDate);
+  const relKey = (r.artist + "-" + r.title).toLowerCase().replace(/\s+/g, "-");
   const [scheduled, setScheduled] = useState<boolean>(() => {
-    try { return localStorage.getItem("rollout_scheduled") === "1"; } catch { return false; }
+    try { return localStorage.getItem(`rollout_scheduled_${relKey}`) === "1"; } catch { return false; }
   });
 
   let submitted = false;
@@ -45,9 +46,13 @@ export default function App() {
     { label: "Distribution", ok: submitted },
     { label: "Release Page", ok: Boolean(streamingLink) },
   ];
-  const DIST = ["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p, i) => ({
+  // A platform only reads "live" once the release is actually out (a streaming
+  // link exists). Rollout hands off to a distributor and can't know per-platform
+  // status before then, so we don't fake individual checkmarks.
+  const distLive = Boolean(streamingLink);
+  const DIST = ["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p) => ({
     label: p,
-    ok: streamingLink ? true : submitted && i < 2,
+    ok: distLive,
   }));
 
   const dateLabel = releaseDate
@@ -56,7 +61,7 @@ export default function App() {
 
   const schedule = () => {
     setScheduled(true);
-    try { localStorage.setItem("rollout_scheduled", "1"); } catch { /* ignore */ }
+    try { localStorage.setItem(`rollout_scheduled_${relKey}`, "1"); } catch { /* ignore */ }
   };
 
   const Cell = ({ v, unit, violet }: { v: number; unit: string; violet?: boolean }) => (
@@ -176,6 +181,13 @@ export default function App() {
                 <span className={(d.ok ? "text-[#F2F0F7]" : "text-[#9A96AD]") + " text-sm leading-5"}>{d.label}</span>
               </div>
             ))}
+            <span className="mt-1 block text-[11px] leading-4 text-[#5E5A72]">
+              {distLive
+                ? "Live on all platforms."
+                : submitted
+                  ? "Submitted to your distributor. Platforms go live on release day."
+                  : "Submit through Distribution to go live."}
+            </span>
           </div>
         </div>
       </div>
@@ -191,11 +203,11 @@ export default function App() {
         </Button>
         {scheduled && dateLabel ? (
           <span className="text-[#46E0A8] text-sm leading-5">
-            Your release has been scheduled for {dateLabel}.
+            Locked in for {dateLabel}. Your distributor pushes the track live that day, and your promo plan is ready in Release Plan.
           </span>
         ) : (
           <span className="text-[#5E5A72] text-sm leading-5">
-            {dateLabel ? `Everything goes live automatically on ${dateLabel}.` : "Pick a date to schedule the release."}
+            {dateLabel ? `Lock in ${dateLabel} and Rollout lines up your launch-day plan.` : "Pick a date to schedule the release."}
           </span>
         )}
       </div>

@@ -12,6 +12,14 @@ import os
 import urllib.parse
 import urllib.request
 
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):  # don't forward the Pexels key on a 3xx
+        return None
+
+
+_NO_REDIR = urllib.request.build_opener(_NoRedirect)
+
 CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "broll")
 os.makedirs(CACHE, exist_ok=True)
 
@@ -62,9 +70,11 @@ def _search(query, key, per_page=3):
             "size": "medium", "per_page": per_page,
         })
     )
+    # carries the Pexels key — don't follow a redirect to another host (key leak)
+    # and cap the read so a misbehaving response can't exhaust memory
     req = urllib.request.Request(url, headers={"Authorization": key})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.load(r)
+    with _NO_REDIR.open(req, timeout=60) as r:
+        return json.loads(r.read(8 * 1024 * 1024))
 
 
 def fetch_clips(style, moods, n=4):
@@ -96,7 +106,14 @@ def fetch_clips(style, moods, n=4):
                 if not best:
                     continue
                 dest = os.path.join(CACHE, f"{slug}__{video['id']}.mp4")
-                urllib.request.urlretrieve(best["link"], dest)
+                # timeout + size cap + atomic write so a stalled/partial download
+                # never hangs the worker or gets cached as if complete
+                from netguard import fetch_url  # IP-pinned, SSRF-safe, size-capped
+                data = fetch_url(best["link"], timeout=60, max_bytes=50 * 1024 * 1024)
+                tmp_dest = dest + ".part"
+                with open(tmp_dest, "wb") as fo:
+                    fo.write(data)
+                os.replace(tmp_dest, dest)
                 paths.append(dest)
                 break
         except Exception:

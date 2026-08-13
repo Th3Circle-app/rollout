@@ -3,19 +3,17 @@ import {
   Download,
   Eye,
   EyeOff,
+  ImageOff,
   Layers,
   Loader2,
   Lock,
-  Package,
   RefreshCw,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, getSeeds, rotateSeeds } from "@/store";
 import { loadImgConn } from "@/pages/Settings";
 import { renderStack, DEFAULT_LAYERS, type Layers as LayerStack, type BlendMode } from "@/compositor";
+import { API_BASE as API } from "@/lib/api";
 
 // $0, keyless image generation. Built-in AI must never cost us money.
 const IMG = (prompt: string, seed: number) =>
@@ -57,6 +55,7 @@ export default function App() {
   const [seeds, setSeeds] = useState<number[]>(getSeeds());
   const [selected, setSelected] = useState(0);
   const [loaded, setLoaded] = useState<Record<number, boolean>>({});
+  const [failed, setFailed] = useState<Record<number, boolean>>({});
   const [downloading, setDownloading] = useState(false);
   const [layers, setLayers] = useState<LayerStack>(DEFAULT_LAYERS);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,9 +97,9 @@ export default function App() {
     try { localStorage.setItem("rollout_model", id); } catch { /* ignore */ }
   };
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/imagemodels")
+    fetch(`${API}/imagemodels`)
       .then((r) => r.json())
-      .then((j) => setCatalog(j.models))
+      .then((j) => setCatalog(Array.isArray(j.models) ? j.models : []))
       .catch(() => setCatalog([]));
   }, []);
   const [subjectBusy, setSubjectBusy] = useState(false);
@@ -114,16 +113,16 @@ export default function App() {
   });
   const [artPrompt, setArtPrompt] = useState("");
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/artstyles")
+    fetch(`${API}/artstyles`)
       .then((r) => r.json())
-      .then((j) => setStyles(j.styles))
+      .then((j) => setStyles(Array.isArray(j.styles) ? j.styles : []))
       .catch(() => setStyles([]));
   }, []);
   // fetch direction whenever style / vibe / user direction changes (debounced)
   useEffect(() => {
     let dead = false;
     const t = setTimeout(() => {
-      fetch("http://127.0.0.1:8000/artdirect", {
+      fetch(`${API}/artdirect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ moods: r.moods, keywords: r.keywords, direction, style, genre: (r as { genre?: string }).genre || "" }),
@@ -131,16 +130,18 @@ export default function App() {
         .then((res) => res.json())
         .then((j) => {
           if (dead) return;
-          setArtPrompt(j.prompt);
-          // apply the archetype's layer recipe (user can still tweak after)
+          setArtPrompt(typeof j.prompt === "string" ? j.prompt : "");
+          // apply the archetype's layer recipe (guard a malformed 200)
           const L = j.layers;
-          setLayers((prev) => ({
-            ...prev,
-            wash: { ...prev.wash, color1: L.wash.color1, color2: L.wash.color2, blend: L.wash.blend, opacity: L.wash.opacity },
-            texture: { ...prev.texture, kind: L.texture.kind, opacity: L.texture.opacity },
-            light: { ...prev.light, kind: L.light.kind, color: L.light.color ?? prev.light.color, opacity: L.light.opacity },
-            type: { ...prev.type, layout: L.type.layout, font: L.type.font },
-          }));
+          if (L?.wash && L?.texture && L?.light && L?.type) {
+            setLayers((prev) => ({
+              ...prev,
+              wash: { ...prev.wash, color1: L.wash.color1, color2: L.wash.color2, blend: L.wash.blend, opacity: L.wash.opacity },
+              texture: { ...prev.texture, kind: L.texture.kind, opacity: L.texture.opacity },
+              light: { ...prev.light, kind: L.light.kind, color: L.light.color ?? prev.light.color, opacity: L.light.opacity },
+              type: { ...prev.type, layout: L.type.layout, font: L.type.font },
+            }));
+          }
         })
         .catch(() => { if (!dead) setArtPrompt(""); });
     }, 350);
@@ -175,7 +176,7 @@ export default function App() {
     setPhotoBusy("exact");
     setPhotoMsg("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/removebg", {
+      const res = await fetch(`${API}/removebg`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ b64: photoB64 }),
@@ -205,7 +206,7 @@ export default function App() {
     setPhotoMsg("");
     try {
       const conn = loadImgConn();
-      const res = await fetch("http://127.0.0.1:8000/genimage", {
+      const res = await fetch(`${API}/genimage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -232,7 +233,7 @@ export default function App() {
     setPhotoBusy("essence");
     setPhotoMsg("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/photoessence", {
+      const res = await fetch(`${API}/photoessence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ b64: photoB64 }),
@@ -242,7 +243,8 @@ export default function App() {
       if (j.palette?.length >= 2) {
         setLayers((L) => ({ ...L, wash: { ...L.wash, color1: j.palette[0], color2: j.palette[1] } }));
       }
-      setDirection((d) => (j.character + (d ? ", " + d : "")));
+      const character = typeof j.character === "string" ? j.character : "";
+      if (character) setDirection((d) => character + (d ? ", " + d : ""));
       setPhotoMsg("✓ essence captured — palette + mood now drive new concepts");
     } catch {
       setPhotoMsg("essence read failed — is the engine running?");
@@ -266,6 +268,20 @@ export default function App() {
   // BYO provider chain: generate through the artist's connected account,
   // auto-fallback to the built-in generator on any failure.
   const [urls, setUrls] = useState<string[]>(builtinUrls);
+  // Clear per-index load state ONLY for indices whose URL actually changed.
+  // A blanket reset would strand the unchanged thumbnails: their <img src> is
+  // identical, so it never remounts and onLoad can't refire, leaving loaded[i]
+  // false forever behind an opaque spinner (happens on single-index restyle).
+  // Resetting only changed indices also clears a stale failed[i] so a fresh URL
+  // at that index re-mounts and re-attempts the load.
+  const prevUrls = useRef<string[]>(builtinUrls);
+  useEffect(() => {
+    const prev = prevUrls.current;
+    const changed = (i: number) => urls[i] !== prev[i];
+    setLoaded((l) => { const n = { ...l }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
+    setFailed((f) => { const n = { ...f }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
+    prevUrls.current = urls;
+  }, [urls]);
   const byoBlobs = useRef<Record<number, Blob>>({});
   useEffect(() => {
     const conn = loadImgConn();
@@ -284,13 +300,14 @@ export default function App() {
       return;
     }
     setLoaded({});
+    setFailed({});
     setUrls(["", "", "", ""]);
     (async () => {
       const out: string[] = [...builtinUrls];
       await Promise.all(
         seeds.map(async (seed, i) => {
           try {
-            const res = await fetch("http://127.0.0.1:8000/genimage", {
+            const res = await fetch(`${API}/genimage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ...source, prompt, seed, size: 1024 }),
@@ -338,7 +355,7 @@ export default function App() {
         `studio photo of ${subjPrompt}, single subject, centered, plain solid background, no text`,
         Math.floor(Math.random() * 1_000_000)
       );
-      const res = await fetch("http://127.0.0.1:8000/removebg", {
+      const res = await fetch(`${API}/removebg`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: srcUrl }),
@@ -392,6 +409,7 @@ export default function App() {
       return;
     }
     setLoaded({});
+    setFailed({});
     setSeeds(rotateSeeds());
   };
 
@@ -415,7 +433,7 @@ export default function App() {
         });
         upBody = { b64, size: 3000 };
       }
-      const res = await fetch("http://127.0.0.1:8000/upscale", {
+      const res = await fetch(`${API}/upscale`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(upBody),
@@ -440,7 +458,7 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch {
-      window.open(urls[selected], "_blank");
+      window.open(urls[selected], "_blank", "noopener,noreferrer");
     } finally {
       setDownloading(false);
     }
@@ -578,17 +596,27 @@ export default function App() {
                     (selected === i ? "border-violet-500" : "border-transparent hover:border-white/20")
                   }
                 >
-                  {!loaded[i] && (
+                  {!loaded[i] && !failed[i] && (
                     <div className="absolute inset-0 flex items-center justify-center bg-[#15151C]">
                       <Loader2 className="size-4 animate-spin text-violet-500" />
                     </div>
                   )}
-                  <img
-                    src={urls[i]}
-                    alt={`Base ${i + 1}`}
-                    className="object-cover w-full h-full"
-                    onLoad={() => setLoaded((l) => ({ ...l, [i]: true }))}
-                  />
+                  {failed[i] ? (
+                    // generator was rate-limited or errored — show a calm placeholder
+                    // with a nudge instead of a broken image or an endless spinner
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-[#15151C] px-2 text-center">
+                      <ImageOff className="size-4 text-[#5E5A72]" />
+                      <span className="text-[9px] leading-tight text-[#9A96AD]">Couldn't load. Tap New set.</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={urls[i]}
+                      alt={`Base ${i + 1}`}
+                      className="object-cover w-full h-full"
+                      onLoad={() => setLoaded((l) => ({ ...l, [i]: true }))}
+                      onError={() => setFailed((f) => ({ ...f, [i]: true }))}
+                    />
+                  )}
                   <div className="rounded-sm bg-[#0B0B0F]/70 border-[#F0A45B]/40 border-1 border-solid absolute left-1.5 top-1.5 px-1.5 py-0.5">
                     <span className="font-mono text-[#F0A45B] text-[9px]">AI</span>
                   </div>
