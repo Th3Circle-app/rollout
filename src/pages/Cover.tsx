@@ -269,7 +269,7 @@ export default function App() {
   // auto-fallback to the built-in generator on any failure.
   const [urls, setUrls] = useState<string[]>(builtinUrls);
   // Clear per-index load state ONLY for indices whose URL actually changed.
-  // A blanket reset would strand the unchanged thumbnails: their <img src> is
+  // A blanket reset would strand the unchanged thumbnails: their image source is
   // identical, so it never remounts and onLoad can't refire, leaving loaded[i]
   // false forever behind an opaque spinner (happens on single-index restyle).
   // Resetting only changed indices also clears a stale failed[i] so a fresh URL

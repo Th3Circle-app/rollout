@@ -73,7 +73,7 @@ export default function Auth({ onBack }: { onBack?: () => void }) {
       {onBack && (
         <button
           onClick={onBack}
-          className="absolute left-6 top-6 z-20 rounded-full border border-white/10 bg-white/5 px-4 py-2 font-mono text-[11px] text-[#9A96AD] backdrop-blur transition-colors hover:text-white"
+          className="absolute left-6 top-6 z-20 rounded-full border border-white/10 bg-[#15151C] px-4 py-2 font-mono text-[11px] text-[#9A96AD] transition-colors hover:text-white"
         >
           ← back
         </button>
