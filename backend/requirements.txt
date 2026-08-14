@@ -40,7 +40,9 @@ demucs==4.1.0
 julius==0.2.8
 
 # --- image: background removal / cut-out ---
-rembg==2.0.77
+# 2.0.67 is the last release that depends on plain `numpy`; 2.0.77 hard-requires
+# numpy>=2.3, which collides with the numpy 1.26.4 that torch 2.2.2 needs.
+rembg==2.0.67
 onnxruntime==1.23.2
 pillow==12.3.0
 
