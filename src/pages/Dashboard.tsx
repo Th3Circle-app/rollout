@@ -13,8 +13,8 @@ function fmtDate(d: string) {
 export default function App() {
   const { release, go, releaseDate, streamingLink } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav", title: "Fail Safe", artist: "Xkaii",
-    key: "C minor", bpm: 99, duration: "3:56",
+    filename: "Afterglow Nova.wav", title: "Afterglow", artist: "Nova",
+    key: "A minor", bpm: 120, duration: "3:24",
     moods: ["emotional", "moody", "driving"], keywords: [], coverUrl: "", lyrics: "",
   };
 
@@ -33,10 +33,10 @@ export default function App() {
   const linkLive = Boolean(streamingLink);
 
   const ASSETS: {
-    label: string; sub?: string; page: string; ready: boolean; readyLabel?: string; img?: string; wide?: boolean;
+    label: string; sub?: string; page: string; ready: boolean; readyLabel?: string; img?: string; wide?: boolean; ai?: boolean;
   }[] = [
-    { label: "Cover Art", page: "Cover", ready: Boolean(r.coverUrl), img: r.coverUrl },
-    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: Boolean(r.lyrics), readyLabel: r.lyrics ? "Ready" : "Needs lyrics" },
+    { label: "Cover Art", page: "Cover", ready: Boolean(r.coverUrl), img: r.coverUrl, ai: true },
+    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: Boolean(r.lyrics), readyLabel: r.lyrics ? "Ready" : "Needs lyrics", ai: true },
     { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), readyLabel: releaseDate ? "Ready" : "Set a date" },
     { label: "Distribution", page: "Distribute", ready: submitted, readyLabel: submitted ? "Submitted" : "Needs review" },
     { label: "Release Page", page: "Landing", ready: linkLive, readyLabel: linkLive ? "Ready" : "Needs review", wide: true },
@@ -71,7 +71,7 @@ export default function App() {
                 )}
               </div>
               <div className="flex flex-col gap-1">
-                <h1 className="font-bold text-[#F2F0F7] text-4xl leading-10 tracking-tight">{r.title}</h1>
+                <h1 className="page-title text-[40px]">{r.title}</h1>
                 <p className="text-[#9A96AD] text-sm leading-5">{r.artist}</p>
                 <div className="flex mt-1 items-center gap-3">
                   <div className="flex items-end gap-0.5 h-4">
@@ -111,7 +111,7 @@ export default function App() {
                   key={a.label}
                   onClick={() => go(a.page)}
                   className={
-                    "shadow-none rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-4 gap-3 cursor-pointer transition-colors hover:border-white/20 " +
+                    "rounded-2xl panel card-premium p-4 gap-3 cursor-pointer hover:border-white/20 " +
                     (a.wide ? "col-span-2" : "")
                   }
                 >
@@ -132,9 +132,11 @@ export default function App() {
                       </div>
                       <Chip ok={a.ready} label={a.readyLabel} />
                     </div>
-                    <span className="inline-flex font-medium uppercase rounded-sm bg-[#F0A45B]/10 text-[#F0A45B] text-[9px] tracking-wide px-1.5 py-0.5 w-fit">
-                      AI Generated
-                    </span>
+                    {a.ai && (
+                      <span className="inline-flex font-medium uppercase rounded-sm bg-[#F0A45B]/10 text-[#F0A45B] text-[9px] tracking-wide px-1.5 py-0.5 w-fit">
+                        AI Generated
+                      </span>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -144,7 +146,7 @@ export default function App() {
 
         {/* right rail */}
         <div className="shrink-0 w-80">
-          <Card className="sticky flex flex-col shadow-none rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid top-8 p-6 gap-6">
+          <Card className="sticky flex flex-col rounded-2xl panel top-8 p-6 gap-6">
             <CardHeader className="p-0 gap-3">
               <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Release</span>
               <div className="flex flex-col gap-1">
@@ -159,8 +161,10 @@ export default function App() {
             <CardContent className="flex p-0 flex-col gap-3">
               <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Distribution</span>
               <div className="flex flex-col gap-3">
-                {["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p, i) => {
-                  const ok = linkLive ? true : submitted && i < 2;
+                {["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p) => {
+                  // "live" only once the release is actually out — no faked
+                  // per-platform status before the distributor pushes it
+                  const ok = linkLive;
                   return (
                     <div key={p} className="flex items-center gap-3">
                       {ok ? (
@@ -175,9 +179,16 @@ export default function App() {
                   );
                 })}
               </div>
+              <span className="block text-[11px] leading-4 text-[#5E5A72]">
+                {linkLive
+                  ? "Live on all platforms."
+                  : submitted
+                    ? "Submitted to your distributor · live on release day."
+                    : "Not submitted yet."}
+              </span>
             </CardContent>
             <CardFooter className="p-0">
-              <Button onClick={() => go("Ship")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white w-full h-11">
+              <Button onClick={() => go("Ship")} className="btn-primary rounded-xl text-white w-full h-11">
                 Review &amp; publish
               </Button>
             </CardFooter>

@@ -129,14 +129,18 @@ def listen(path, mode="", bpm=0, lyrics="", cache_key=""):
             audio = _AUDIO_CACHE[cache_key]
         else:
             wavs = _windows(path)
-            embeds = m.get_audio_embedding_from_filelist(wavs, use_tensor=False)
-            audio = _norm(_norm(embeds).mean(axis=0, keepdims=True))
-            import os as _os
-            for w in wavs:
-                if w != path:
-                    try: _os.unlink(w)
-                    except OSError: pass
+            try:
+                embeds = m.get_audio_embedding_from_filelist(wavs, use_tensor=False)
+                audio = _norm(_norm(embeds).mean(axis=0, keepdims=True))
+            finally:
+                import os as _os
+                for w in wavs:
+                    if w != path:
+                        try: _os.unlink(w)
+                        except OSError: pass
             if cache_key:
+                if len(_AUDIO_CACHE) >= 64:  # bound the in-process embedding cache
+                    _AUDIO_CACHE.pop(next(iter(_AUDIO_CACHE)))
                 _AUDIO_CACHE[cache_key] = audio
 
         # moods: ensemble + calibrate + theory advice

@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import {
-  ArrowRight, AudioLines, FileText, Layers, Package, Settings, Upload, X, Zap, Loader2,
+  ArrowRight, AudioLines, FileText, Upload, X, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, deriveTitleArtist, FREE_SONG_LIMIT } from "@/store";
 import { supabase } from "@/lib/supabase";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 type Result = {
   filename: string; key: string; bpm: number; duration: string;
@@ -23,24 +23,16 @@ export default function App() {
   const [err, setErr] = useState("");
   const [lyrics, setLyrics] = useState("");
 
+  const overLimitMsg =
+    FREE_SONG_LIMIT === 1
+      ? "Your free song is used — unlock unlimited releases"
+      : `Your ${FREE_SONG_LIMIT} free songs are used — unlock unlimited releases`;
+
   async function handleFile(f: File) {
-    // Cloud mode: the SERVER meters free slots (client can't cheat).
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.rpc("rollout_consume_song_slot", { fname: f.name });
-        if (!error && data && data.ok === false) {
-          openUpgrade("Your free song is used — unlock unlimited releases");
-          return;
-        }
-      } catch { /* engine of record unavailable — fall through to local gate */ }
-    }
-    // Local-mode gate (and belt-and-suspenders alongside cloud)
+    // Cheap pre-gate: an obviously over-limit free user gets the upsell before
+    // we spend an analysis. (Server RPC below is the authoritative consume.)
     if (plan === "free" && songsUsed >= FREE_SONG_LIMIT) {
-      openUpgrade(
-        FREE_SONG_LIMIT === 1
-          ? "Your free song is used — unlock unlimited releases"
-          : `Your ${FREE_SONG_LIMIT} free songs are used — unlock unlimited releases`
-      );
+      openUpgrade(overLimitMsg);
       return;
     }
     setName(f.name);
@@ -53,7 +45,16 @@ export default function App() {
       if (!r.ok) throw new Error("Analysis failed");
       setResult(await r.json());
       setStatus("done");
-      useSongSlot(f.name); // burn a free slot only on success
+      // Consume the slot ONLY after a successful analysis, so a transient
+      // backend failure never permanently burns the user's free song. The
+      // server RPC is authoritative (idempotent per filename); local mirrors it.
+      if (supabase) {
+        try {
+          const { data, error } = await supabase.rpc("rollout_consume_song_slot", { fname: f.name });
+          if (!error && data && data.ok === false) openUpgrade(overLimitMsg);
+        } catch { /* server unreachable — local gate already applied */ }
+      }
+      useSongSlot(f.name);
     } catch (e: any) {
       setErr(e?.message || "Could not reach the analyzer");
       setStatus("error");
@@ -94,10 +95,10 @@ export default function App() {
           </div>
 
           <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
-            <div className="max-w-[720px] text-center flex mb-10 flex-col items-center gap-3 w-full">
-              <span className="font-semibold uppercase text-violet-500 text-[11px] tracking-[3.2px]">New Release</span>
-              <h1 className="font-bold text-[#F2F0F7] text-5xl leading-12 tracking-tight">Start a release.</h1>
-              <p className="text-[#9A96AD] text-base leading-6">Drop a finished track. Rollout reads it and builds the rest.</p>
+            <div className="hero-glow max-w-[720px] text-center flex mb-10 flex-col items-center gap-4 w-full">
+              <span className="kicker kicker-center relative z-10">New Release</span>
+              <h1 className="page-title relative z-10 text-[52px]">Start a release.</h1>
+              <p className="relative z-10 text-[#9A96AD] text-[17px] leading-7">Drop a finished track. Rollout reads it and builds the rest.</p>
             </div>
 
             <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={onPick} />
@@ -108,7 +109,7 @@ export default function App() {
                 onClick={() => fileRef.current?.click()}
                 onDrop={onDrop}
                 onDragOver={(e) => e.preventDefault()}
-                className="max-w-[720px] edge rounded-3xl bg-[#15151C] border-white/16 border-1 border-dashed flex p-16 flex-col items-center gap-4 w-full cursor-pointer hover:border-violet-500/60 transition-colors"
+                className="panel border-dashed border-white/10 max-w-[720px] rounded-3xl flex p-16 flex-col items-center gap-4 w-full cursor-pointer hover:border-violet-500/50 transition-colors"
               >
                 <div className="size-14 rounded-2xl bg-[#1E1E28] border-white/8 border-1 border-solid flex justify-center items-center">
                   <Upload className="size-6 text-violet-500" />
@@ -120,7 +121,7 @@ export default function App() {
 
             {/* ANALYZING / DONE / ERROR: result card */}
             {status !== "idle" && (
-              <div className="max-w-[720px] edge rounded-3xl bg-[#15151C] border-white/16 border-1 border-dashed flex p-10 flex-col gap-8 w-full">
+              <div className="panel max-w-[720px] rounded-3xl flex p-10 flex-col gap-8 w-full">
                 <div className="flex justify-between items-start gap-6">
                   <div className="flex items-center gap-4">
                     <div className="size-12 rounded-2xl bg-[#1E1E28] border-white/8 border-1 border-solid flex justify-center items-center">
@@ -218,6 +219,8 @@ export default function App() {
                   // lyrics refine the vibe (fast — audio embedding is cached)
                   if (lyrics.trim() && result.file_id) {
                     try {
+                      const ctrl = new AbortController();
+                      const to = setTimeout(() => ctrl.abort(), 8000); // don't stall navigation
                       const res = await fetch(`${API}/revibe`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -226,17 +229,19 @@ export default function App() {
                           mode: result.key.toLowerCase().includes("minor") ? "minor" : "major",
                           bpm: result.bpm,
                         }),
+                        signal: ctrl.signal,
                       });
+                      clearTimeout(to);
                       if (res.ok) {
                         const v = await res.json();
-                        refined = { ...result, moods: v.moods, genre: v.genre };
+                        refined = { ...result, moods: Array.isArray(v.moods) ? v.moods : result.moods, genre: v.genre ?? result.genre };
                       }
                     } catch { /* keep original read */ }
                   }
                   setRelease({ ...refined, title, artist: artist || "", lyrics: lyrics.trim() });
                   go("Build"); // original flow: Import -> Building -> Ready -> hub
                 }}
-                className="font-semibold rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40"
+                className="btn-primary font-semibold rounded-xl text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40 disabled:shadow-none"
               >
                 Build my rollout <ArrowRight className="size-4" />
               </Button>

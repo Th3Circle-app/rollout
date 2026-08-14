@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { ArrowRight, Loader2, Mail, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import GlassBackground from "@/components/GlassBackground";
+import StarField from "@/components/StarField";
+import ErrorBoundary from "@/components/ErrorBoundary";
+
+// Three.js is heavy and only the sign-in screen needs it — code-split it so the
+// studio bundle stays lean and 3D loads on demand.
+const Headphones3D = lazy(() => import("@/components/Headphones3D"));
 
 // Multi-tenant sign-in. Email + password AND magic links cover EVERY email
 // provider on earth (Titan, Hotmail, private domains...). Google OAuth on
@@ -9,7 +16,7 @@ import { supabase } from "@/lib/supabase";
 
 type Mode = "signin" | "signup" | "magic";
 
-export default function Auth() {
+export default function Auth({ onBack }: { onBack?: () => void }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,8 +69,23 @@ export default function Auth() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0B0B0F] px-6">
-      <div className="edge w-full max-w-md rounded-3xl bg-[#15151C] border-white/8 border-1 border-solid p-8">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+      <GlassBackground />
+      <StarField />
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="absolute left-6 top-6 z-20 rounded-full border border-white/10 bg-[#15151C] px-4 py-2 font-mono text-[11px] text-[#9A96AD] transition-colors hover:text-white"
+        >
+          ← back
+        </button>
+      )}
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          <Headphones3D />
+        </Suspense>
+      </ErrorBoundary>
+      <div className="rise glass relative z-10 w-full max-w-md rounded-3xl p-8">
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <div className="size-10 rounded-xl bg-violet-500 flex items-center justify-center">
             <Zap className="size-5 text-[#0B0B0F]" fill="#0B0B0F" />
@@ -99,6 +121,8 @@ export default function Auth() {
               value={artistName}
               onChange={(e) => setArtistName(e.target.value)}
               placeholder="Artist name"
+              aria-label="Artist name"
+              autoComplete="nickname"
               className="rounded-xl bg-[#1E1E28] border border-white/10 px-4 py-3 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
             />
           )}
@@ -107,6 +131,8 @@ export default function Auth() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Email — any provider works"
+            aria-label="Email"
+            autoComplete="email"
             className="rounded-xl bg-[#1E1E28] border border-white/10 px-4 py-3 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
           />
           {mode !== "magic" && (
@@ -116,6 +142,8 @@ export default function Auth() {
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
               placeholder="Password"
+              aria-label="Password"
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
               className="rounded-xl bg-[#1E1E28] border border-white/10 px-4 py-3 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
             />
           )}

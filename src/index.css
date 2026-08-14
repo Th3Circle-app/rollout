@@ -52,7 +52,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .page-enter,
   .animate-spin,
-  .animate-pulse {
+  .animate-pulse,
+  .rise,
+  .rise-2,
+  .rise-3 {
     animation: none !important;
   }
   * {
@@ -79,20 +82,100 @@ body {
    primary actions. No gradients, no glow. Color is a signal, not decoration. */
 .btn-glow {
   background: #8b5cf6;
+  box-shadow: 0 10px 30px -10px rgba(139, 92, 246, 0.55);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s,
+    background 0.2s;
 }
 .btn-glow:hover {
   background: #7c4dec;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px -10px rgba(139, 92, 246, 0.75);
 }
 
-/* surface card — flat per the original export */
+/* frosted glass surface — sits over the WebGL depth background */
 .glass {
-  background: #15151c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(21, 21, 28, 0.55);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
-/* flat app background — #0B0B0F everywhere, no ambient gradients */
+/* transparent so the fixed WebGL glass background shows through the studio */
 .app-bg {
-  background: #0b0b0f;
+  background: transparent;
+}
+
+/* cinematic entrance — staggered rise for glass panels/heroes */
+@keyframes rollout-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.rise {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rise-2 {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+.rise-3 {
+  animation: rollout-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+/* scroll-triggered reveal — cinematic soft focus-in: each section rises,
+   settles from a slight scale, and sharpens from a blur as it enters view */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px) scale(0.965);
+  filter: blur(8px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform, filter;
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+
+/* kinetic hero headline — words rise + unskew in, staggered via --i */
+@keyframes rollout-word {
+  from {
+    opacity: 0;
+    transform: translateY(0.55em) rotate(2.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+.kinetic-word {
+  display: inline-block;
+  animation: rollout-word 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i) * 0.085s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+  .kinetic-word {
+    animation: none;
+  }
 }
 
 .font-sans {
@@ -111,6 +194,196 @@ body {
   font-family:
     "Source Serif 4", "Inter", ui-serif, Georgia, Cambria, "Times New Roman",
     Times, serif;
+}
+
+/* ── studio type + material system ──────────────────────────────────────────
+   The cinematic signature: page titles are set in Fraunces (high-contrast
+   editorial serif) like a film title card, against mono "slate" kickers and
+   an Inter body. Violet is pulled back to a rare signal — the kicker is
+   neutral, not violet, so no page opens by screaming the accent color. */
+
+.font-display {
+  font-family: "Fraunces Variable", "Fraunces", ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+}
+
+/* page title — big, tight, high-contrast serif; a lit title card */
+.page-title {
+  font-family: "Fraunces Variable", "Fraunces", ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
+  font-weight: 450;
+  letter-spacing: -0.018em;
+  line-height: 1.02;
+  color: #f4f2fa;
+}
+
+/* mono slate kicker — the label above a title. Neutral by default; a short
+   tick sets it like a film slate instead of a violet all-caps eyebrow. */
+.kicker {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #726d86;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+}
+.kicker::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+/* centered heroes want the tick on both sides */
+.kicker-center::after {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* section label — mono rule-header inside a page ("1 · Choose distributor") */
+.section-label {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b667c;
+}
+
+/* instrument panel — the premium card material. An edge-lit surface with a
+   near-invisible top-down gradient and a real seated shadow, so panels read
+   as machined hardware instead of flat charcoal rectangles. */
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 46%),
+    #14131b;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 30px 64px -34px rgba(0, 0, 0, 0.85);
+}
+.panel-inset {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* a soft, cinematic pool of light behind a hero title (very restrained) */
+.hero-glow {
+  position: relative;
+}
+.hero-glow::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 680px;
+  height: 340px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(124, 77, 255, 0.13), rgba(11, 11, 15, 0) 72%);
+  filter: blur(8px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* refined primary action — flat violet with a lit top edge, not a glow blob */
+.btn-primary {
+  background: #7c4dec;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 30px -14px rgba(124, 77, 255, 0.7);
+  transition:
+    background 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+.btn-primary:hover {
+  background: #8b5cf6;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 40px -14px rgba(124, 77, 255, 0.85);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* ── premium polish ─────────────────────────────────────────────────────── */
+
+/* film grain — a fixed, near-invisible texture that ties the whole page
+   together the way grain does on a graded photo. Above content, ignores clicks. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* thin scroll-progress line pinned to the very top */
+.scroll-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 70;
+  background: linear-gradient(90deg, #7c4dec, #b794ff);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
+  transform: scaleX(0);
+  transform-origin: left;
+  will-change: transform;
+}
+
+/* 3D tilt — cards lean toward the cursor */
+.tilt {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* premium card: hover lift + violet edge glow */
+.card-premium {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.35s;
+}
+.card-premium:hover {
+  border-color: rgba(139, 92, 246, 0.42);
+  box-shadow:
+    0 30px 70px -24px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(139, 92, 246, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* hairline violet gradient edge for glass panels (premium detail) */
+.glass-edge {
+  position: relative;
+}
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(140deg, rgba(139, 92, 246, 0.5), rgba(255, 255, 255, 0.06) 42%, transparent 72%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt {
+    transform: none !important;
+  }
 }
 
 @theme inline {
@@ -320,4 +593,71 @@ body {
 }
 .border-r {
   border-color: var(--color-border);
+}
+
+/* ── atmosphere (GPU-safe CSS, can't be evicted like the old WebGL layers) ── */
+
+/* violet glass orb — a defined glowing sphere, cursor-parallaxed + breathing */
+.gb-parallax {
+  position: absolute;
+  inset: 0;
+  transform: translate(var(--gb-x, 0px), var(--gb-y, 0px));
+  will-change: transform;
+}
+.gb-orb {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 40vmax;
+  height: 40vmax;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 34%,
+      rgba(238, 226, 255, 0.92) 0%,
+      rgba(178, 148, 255, 0.74) 14%,
+      rgba(124, 77, 255, 0.60) 34%,
+      rgba(91, 47, 180, 0.42) 52%,
+      rgba(50, 24, 110, 0.22) 68%,
+      rgba(11, 11, 15, 0) 78%);
+  box-shadow: 0 0 16vmax 3vmax rgba(124, 77, 255, 0.22);
+  filter: blur(6px);
+  animation: gb-breathe 8s ease-in-out infinite;
+}
+@keyframes gb-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.92; }
+  50% { transform: translate(-50%, -50%) scale(1.06); opacity: 1; }
+}
+
+/* drifting smoke haze — two slow layers moving against each other */
+.smoke-a, .smoke-b {
+  position: absolute;
+  inset: -30%;
+  filter: blur(60px);
+  will-change: transform;
+}
+.smoke-a {
+  background:
+    radial-gradient(38% 46% at 32% 58%, rgba(74, 48, 130, 0.28), rgba(74, 48, 130, 0) 60%),
+    radial-gradient(34% 40% at 68% 42%, rgba(120, 84, 200, 0.20), rgba(120, 84, 200, 0) 62%);
+  animation: smoke-a 26s ease-in-out infinite;
+}
+.smoke-b {
+  background:
+    radial-gradient(40% 40% at 60% 66%, rgba(60, 40, 120, 0.22), rgba(60, 40, 120, 0) 62%),
+    radial-gradient(30% 38% at 40% 34%, rgba(140, 100, 220, 0.16), rgba(140, 100, 220, 0) 60%);
+  animation: smoke-b 34s ease-in-out infinite;
+}
+@keyframes smoke-a {
+  0%, 100% { transform: translate(-4%, 2%) scale(1); }
+  50% { transform: translate(5%, -3%) scale(1.1); }
+}
+@keyframes smoke-b {
+  0%, 100% { transform: translate(3%, -2%) scale(1.06); }
+  50% { transform: translate(-5%, 4%) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gb-parallax { transform: none; }
+  .gb-orb, .smoke-a, .smoke-b { animation: none; }
 }

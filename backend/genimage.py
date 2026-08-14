@@ -13,23 +13,34 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from netguard import fetch_url, post_json
 
 UA = {"User-Agent": "Mozilla/5.0 (Rollout)"}
+_MAX = 25 * 1024 * 1024  # cap every provider read
 
 
-def _post_json(url, payload, headers, timeout=180):
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", **UA, **headers},
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.load(r)
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    # These raw calls carry `Authorization: Bearer <key>` to a hardcoded host.
+    # Following a 3xx would (a) re-resolve the Location without IP-pinning and
+    # (b) forward the bearer token to whatever host the redirect names. Refuse.
+    def redirect_request(self, *a, **k):
+        return None
 
 
-def _get_bytes(url, headers=None, timeout=180):
-    req = urllib.request.Request(url, headers={**UA, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+_NO_REDIR = urllib.request.build_opener(_NoRedirect)
+
+
+def _post_json(url, payload, headers, timeout=60):
+    # IP-pinned, SSRF-safe, size-capped POST (guards the custom provider base_url)
+    raw = post_json(url, json.dumps(payload).encode(),
+                    headers={**UA, **headers}, timeout=timeout, max_bytes=_MAX)
+    return json.loads(raw)
+
+
+def _get_bytes(url, headers=None, timeout=60):
+    # IP-pinned, SSRF-safe, size-capped — critical because `url` is often a
+    # provider RESPONSE url (e.g. custom/openai/replicate result), user-influenced.
+    return fetch_url(url, timeout=timeout, max_bytes=_MAX, headers=headers or {})
 
 
 # --- providers -------------------------------------------------------------
@@ -102,8 +113,8 @@ def gen_stability(prompt, key, seed=0, size=1024, model=""):
             **UA,
         },
     )
-    with urllib.request.urlopen(req, timeout=300) as r:
-        return r.read()
+    with _NO_REDIR.open(req, timeout=300) as r:
+        return r.read(_MAX + 1)[:_MAX]
 
 
 def gen_openai(prompt, key, seed=0, size=1024, model=""):
@@ -182,8 +193,8 @@ def gen_hf(prompt, key, seed=0, size=1024, model=""):
         headers={"Content-Type": "application/json",
                  "Authorization": f"Bearer {key}", **UA},
     )
-    with urllib.request.urlopen(req, timeout=300) as r:
-        data = r.read()
+    with _NO_REDIR.open(req, timeout=300) as r:
+        data = r.read(_MAX + 1)[:_MAX]
     if data[:1] == b"{":
         raise RuntimeError("HF: " + data[:150].decode(errors="ignore"))
     return data

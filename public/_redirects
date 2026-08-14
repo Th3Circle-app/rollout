@@ -1,0 +1,4 @@
+# SPA fallback: every path serves the app shell, which routes client-side.
+# This makes the public release pages (/r/{slug}) and ?page= deep links resolve
+# on hard navigation / refresh instead of 404ing.
+/*    /index.html   200

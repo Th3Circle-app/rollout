@@ -1,0 +1,54 @@
+# Rollout engine — FastAPI + CLAP (mood) + demucs/whisper (lyric align) +
+# rembg (cut-out) + ffmpeg. Heavy CPU ML service: the CLAP checkpoint alone is
+# ~2GB resident, so this needs real memory. Scale-to-zero keeps an idle engine
+# at ~$0 — Fly stops the machine when idle and boots it on the next request.
+#
+# Deploy from THIS directory (build context = backend/, where the Dockerfile's
+# COPY paths resolve):   cd backend && fly deploy
+# First deploy also needs the volume:   fly volumes create rollout_models --size 5 -r sjc
+#
+# app name + region are the only things you may want to change.
+
+app = "rollout-engine"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  # Point the HF/torch caches at the mounted volume so the ~3GB of model
+  # checkpoints download once and survive restarts (fast cold starts).
+  HF_HOME = "/root/.cache/huggingface"
+  TORCH_HOME = "/root/.cache/torch"
+  # Optional: set PEXELS_KEY as a secret (fly secrets set PEXELS_KEY=...) to
+  # enable the b-roll lyric-video background. Provider image keys stay BYO
+  # per-creator and are never set here.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"   # scale to zero when idle
+  auto_start_machines = true    # boot on the next incoming request
+  min_machines_running = 0
+  # No periodic health check on purpose — a check that polls /health would keep
+  # waking the machine and defeat scale-to-zero. Cold start after idle loads the
+  # CLAP model (~30s-2min on the first request); warm requests are fast.
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 8
+    soft_limit = 4
+
+# CLAP (~2GB) + whisper/demucs/rembg push resident memory well past 2GB. 4GB
+# avoids OOM-kills on the analyze / lyric-align paths. Bump to shared-cpu-4x /
+# 8gb if you run demucs+whisper on large files concurrently.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "4gb"
+
+# Persistent model cache — the checkpoints download to /root/.cache once instead
+# of on every cold start.
+[mounts]
+  source = "rollout_models"
+  destination = "/root/.cache"

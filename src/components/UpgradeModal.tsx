@@ -47,6 +47,7 @@ export default function UpgradeModal() {
   const { upgrade, closeUpgrade, setPlan, plan, session, refreshPlan } = useStore();
   const [interval, setInterval] = useState<"month" | "year">("month");
   const [waiting, setWaiting] = useState(false);
+  const [needsAuth, setNeedsAuth] = useState(false);
   if (!upgrade.open) return null;
 
   const buy = (tier: "artist" | "studio") => {
@@ -55,8 +56,14 @@ export default function UpgradeModal() {
       closeUpgrade();
       return;
     }
-    const url = checkoutUrl(tier, interval, session?.user.id, session?.user.email ?? undefined);
-    window.open(url, "_blank");
+    if (!session?.user?.id) {
+      // no session -> no client_reference_id -> can't attribute the purchase.
+      // Don't silently no-op: tell the user why the button did nothing.
+      setNeedsAuth(true);
+      return;
+    }
+    const url = checkoutUrl(tier, interval, session.user.id, session.user.email ?? undefined);
+    window.open(url, "_blank", "noopener,noreferrer");
     setWaiting(true);
   };
 
@@ -139,7 +146,11 @@ export default function UpgradeModal() {
           })}
         </div>
 
-        {waiting && cloudEnabled ? (
+        {needsAuth && cloudEnabled && !session?.user?.id ? (
+          <p className="mt-4 text-center text-[12px] text-[#F0A45B]">
+            Sign in first to upgrade so your plan attaches to your account.
+          </p>
+        ) : waiting && cloudEnabled ? (
           <button
             onClick={() => refreshPlan()}
             className="mt-4 flex w-full items-center justify-center gap-2 text-xs text-[#9A96AD] hover:text-[#F2F0F7]"

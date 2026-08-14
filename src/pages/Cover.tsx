@@ -3,19 +3,17 @@ import {
   Download,
   Eye,
   EyeOff,
+  ImageOff,
   Layers,
   Loader2,
   Lock,
-  Package,
   RefreshCw,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, getSeeds, rotateSeeds } from "@/store";
 import { loadImgConn } from "@/pages/Settings";
 import { renderStack, DEFAULT_LAYERS, type Layers as LayerStack, type BlendMode } from "@/compositor";
+import { API_BASE as API } from "@/lib/api";
 
 // $0, keyless image generation. Built-in AI must never cost us money.
 const IMG = (prompt: string, seed: number) =>
@@ -41,14 +39,14 @@ const FONTS = ["Arial Black", "Georgia", "Courier New", "Helvetica Neue"];
 export default function App() {
   const { release, setRelease, go, plan, openUpgrade } = useStore();
 
-  // Fall back to Fail Safe so the screen still demos if opened directly.
+  // Fall back to Afterglow so the screen still demos if opened directly.
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: ["dramatic light", "deep shadow", "film grain", "dark tones", "neon glow"],
   };
@@ -57,6 +55,7 @@ export default function App() {
   const [seeds, setSeeds] = useState<number[]>(getSeeds());
   const [selected, setSelected] = useState(0);
   const [loaded, setLoaded] = useState<Record<number, boolean>>({});
+  const [failed, setFailed] = useState<Record<number, boolean>>({});
   const [downloading, setDownloading] = useState(false);
   const [layers, setLayers] = useState<LayerStack>(DEFAULT_LAYERS);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,9 +97,9 @@ export default function App() {
     try { localStorage.setItem("rollout_model", id); } catch { /* ignore */ }
   };
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/imagemodels")
+    fetch(`${API}/imagemodels`)
       .then((r) => r.json())
-      .then((j) => setCatalog(j.models))
+      .then((j) => setCatalog(Array.isArray(j.models) ? j.models : []))
       .catch(() => setCatalog([]));
   }, []);
   const [subjectBusy, setSubjectBusy] = useState(false);
@@ -114,16 +113,16 @@ export default function App() {
   });
   const [artPrompt, setArtPrompt] = useState("");
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/artstyles")
+    fetch(`${API}/artstyles`)
       .then((r) => r.json())
-      .then((j) => setStyles(j.styles))
+      .then((j) => setStyles(Array.isArray(j.styles) ? j.styles : []))
       .catch(() => setStyles([]));
   }, []);
   // fetch direction whenever style / vibe / user direction changes (debounced)
   useEffect(() => {
     let dead = false;
     const t = setTimeout(() => {
-      fetch("http://127.0.0.1:8000/artdirect", {
+      fetch(`${API}/artdirect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ moods: r.moods, keywords: r.keywords, direction, style, genre: (r as { genre?: string }).genre || "" }),
@@ -131,16 +130,18 @@ export default function App() {
         .then((res) => res.json())
         .then((j) => {
           if (dead) return;
-          setArtPrompt(j.prompt);
-          // apply the archetype's layer recipe (user can still tweak after)
+          setArtPrompt(typeof j.prompt === "string" ? j.prompt : "");
+          // apply the archetype's layer recipe (guard a malformed 200)
           const L = j.layers;
-          setLayers((prev) => ({
-            ...prev,
-            wash: { ...prev.wash, color1: L.wash.color1, color2: L.wash.color2, blend: L.wash.blend, opacity: L.wash.opacity },
-            texture: { ...prev.texture, kind: L.texture.kind, opacity: L.texture.opacity },
-            light: { ...prev.light, kind: L.light.kind, color: L.light.color ?? prev.light.color, opacity: L.light.opacity },
-            type: { ...prev.type, layout: L.type.layout, font: L.type.font },
-          }));
+          if (L?.wash && L?.texture && L?.light && L?.type) {
+            setLayers((prev) => ({
+              ...prev,
+              wash: { ...prev.wash, color1: L.wash.color1, color2: L.wash.color2, blend: L.wash.blend, opacity: L.wash.opacity },
+              texture: { ...prev.texture, kind: L.texture.kind, opacity: L.texture.opacity },
+              light: { ...prev.light, kind: L.light.kind, color: L.light.color ?? prev.light.color, opacity: L.light.opacity },
+              type: { ...prev.type, layout: L.type.layout, font: L.type.font },
+            }));
+          }
         })
         .catch(() => { if (!dead) setArtPrompt(""); });
     }, 350);
@@ -175,7 +176,7 @@ export default function App() {
     setPhotoBusy("exact");
     setPhotoMsg("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/removebg", {
+      const res = await fetch(`${API}/removebg`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ b64: photoB64 }),
@@ -205,7 +206,7 @@ export default function App() {
     setPhotoMsg("");
     try {
       const conn = loadImgConn();
-      const res = await fetch("http://127.0.0.1:8000/genimage", {
+      const res = await fetch(`${API}/genimage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -232,7 +233,7 @@ export default function App() {
     setPhotoBusy("essence");
     setPhotoMsg("");
     try {
-      const res = await fetch("http://127.0.0.1:8000/photoessence", {
+      const res = await fetch(`${API}/photoessence`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ b64: photoB64 }),
@@ -242,7 +243,8 @@ export default function App() {
       if (j.palette?.length >= 2) {
         setLayers((L) => ({ ...L, wash: { ...L.wash, color1: j.palette[0], color2: j.palette[1] } }));
       }
-      setDirection((d) => (j.character + (d ? ", " + d : "")));
+      const character = typeof j.character === "string" ? j.character : "";
+      if (character) setDirection((d) => character + (d ? ", " + d : ""));
       setPhotoMsg("✓ essence captured — palette + mood now drive new concepts");
     } catch {
       setPhotoMsg("essence read failed — is the engine running?");
@@ -266,6 +268,20 @@ export default function App() {
   // BYO provider chain: generate through the artist's connected account,
   // auto-fallback to the built-in generator on any failure.
   const [urls, setUrls] = useState<string[]>(builtinUrls);
+  // Clear per-index load state ONLY for indices whose URL actually changed.
+  // A blanket reset would strand the unchanged thumbnails: their image source is
+  // identical, so it never remounts and onLoad can't refire, leaving loaded[i]
+  // false forever behind an opaque spinner (happens on single-index restyle).
+  // Resetting only changed indices also clears a stale failed[i] so a fresh URL
+  // at that index re-mounts and re-attempts the load.
+  const prevUrls = useRef<string[]>(builtinUrls);
+  useEffect(() => {
+    const prev = prevUrls.current;
+    const changed = (i: number) => urls[i] !== prev[i];
+    setLoaded((l) => { const n = { ...l }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
+    setFailed((f) => { const n = { ...f }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
+    prevUrls.current = urls;
+  }, [urls]);
   const byoBlobs = useRef<Record<number, Blob>>({});
   useEffect(() => {
     const conn = loadImgConn();
@@ -284,13 +300,14 @@ export default function App() {
       return;
     }
     setLoaded({});
+    setFailed({});
     setUrls(["", "", "", ""]);
     (async () => {
       const out: string[] = [...builtinUrls];
       await Promise.all(
         seeds.map(async (seed, i) => {
           try {
-            const res = await fetch("http://127.0.0.1:8000/genimage", {
+            const res = await fetch(`${API}/genimage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ ...source, prompt, seed, size: 1024 }),
@@ -338,7 +355,7 @@ export default function App() {
         `studio photo of ${subjPrompt}, single subject, centered, plain solid background, no text`,
         Math.floor(Math.random() * 1_000_000)
       );
-      const res = await fetch("http://127.0.0.1:8000/removebg", {
+      const res = await fetch(`${API}/removebg`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: srcUrl }),
@@ -392,6 +409,7 @@ export default function App() {
       return;
     }
     setLoaded({});
+    setFailed({});
     setSeeds(rotateSeeds());
   };
 
@@ -415,7 +433,7 @@ export default function App() {
         });
         upBody = { b64, size: 3000 };
       }
-      const res = await fetch("http://127.0.0.1:8000/upscale", {
+      const res = await fetch(`${API}/upscale`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(upBody),
@@ -440,7 +458,7 @@ export default function App() {
       a.click();
       URL.revokeObjectURL(a.href);
     } catch {
-      window.open(urls[selected], "_blank");
+      window.open(urls[selected], "_blank", "noopener,noreferrer");
     } finally {
       setDownloading(false);
     }
@@ -456,7 +474,7 @@ export default function App() {
     k: keyof LayerStack;
     children?: React.ReactNode;
   }) => (
-    <div className="rounded-xl border border-white/10 bg-[#15151C] p-3 flex flex-col gap-2.5">
+    <div className="rounded-xl panel-inset p-3 flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-neutral-50">{name}</span>
         <button aria-label={`Toggle ${name} layer`} onClick={() => patch(k, { visible: !layers[k].visible } as never)}>
@@ -568,7 +586,7 @@ export default function App() {
           <div className="flex px-6 xl:px-12 py-8 items-start gap-8">
             {/* base variants — Screen 6 style: rounded-2xl + amber AI badge */}
             <div className="shrink-0 flex flex-col gap-4 w-32">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest mb-1">Options</div>
+              <div className="section-label mb-1">Options</div>
               {[0, 1, 2, 3].map((i) => (
                 <button
                   key={i}
@@ -578,17 +596,27 @@ export default function App() {
                     (selected === i ? "border-violet-500" : "border-transparent hover:border-white/20")
                   }
                 >
-                  {!loaded[i] && (
+                  {!loaded[i] && !failed[i] && (
                     <div className="absolute inset-0 flex items-center justify-center bg-[#15151C]">
                       <Loader2 className="size-4 animate-spin text-violet-500" />
                     </div>
                   )}
-                  <img
-                    src={urls[i]}
-                    alt={`Base ${i + 1}`}
-                    className="object-cover w-full h-full"
-                    onLoad={() => setLoaded((l) => ({ ...l, [i]: true }))}
-                  />
+                  {failed[i] ? (
+                    // generator was rate-limited or errored — show a calm placeholder
+                    // with a nudge instead of a broken image or an endless spinner
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-[#15151C] px-2 text-center">
+                      <ImageOff className="size-4 text-[#5E5A72]" />
+                      <span className="text-[9px] leading-tight text-[#9A96AD]">Couldn't load. Tap New set.</span>
+                    </div>
+                  ) : (
+                    <img
+                      src={urls[i]}
+                      alt={`Base ${i + 1}`}
+                      className="object-cover w-full h-full"
+                      onLoad={() => setLoaded((l) => ({ ...l, [i]: true }))}
+                      onError={() => setFailed((f) => ({ ...f, [i]: true }))}
+                    />
+                  )}
                   <div className="rounded-sm bg-[#0B0B0F]/70 border-[#F0A45B]/40 border-1 border-solid absolute left-1.5 top-1.5 px-1.5 py-0.5">
                     <span className="font-mono text-[#F0A45B] text-[9px]">AI</span>
                   </div>
@@ -602,7 +630,7 @@ export default function App() {
 
             {/* live composite preview */}
             <div className="flex flex-col items-center gap-3">
-              <div className="relative aspect-square rounded-3xl border-white/10 border-1 border-solid w-80 xl:w-105 overflow-hidden bg-[#15151C]">
+              <div className="relative aspect-square rounded-3xl panel w-80 xl:w-105 overflow-hidden">
                 <canvas ref={canvasRef} className="w-full h-full" />
               </div>
               <div className="font-mono text-[#9A96AD] text-xs">
@@ -618,7 +646,7 @@ export default function App() {
                     setRelease({ ...r, coverUrl: urls[selected] });
                     go("Distribute"); // doc order: cover -> distributor hand-off
                   }}
-                  className="btn-glow text-white"
+                  className="btn-primary text-white"
                 >
                   Use this cover
                 </Button>
@@ -626,9 +654,9 @@ export default function App() {
             </div>
 
             {/* layers panel */}
-            <div className="shrink-0 edge rounded-2xl bg-[#15151C] border-white/10 border-1 border-solid flex p-5 flex-col gap-3 w-80">
+            <div className="shrink-0 panel rounded-2xl flex p-5 flex-col gap-3 w-80">
               {/* start from a photo */}
-              <div className="rounded-xl border border-white/10 bg-[#15151C] p-3 flex flex-col gap-2.5">
+              <div className="rounded-xl panel-inset p-3 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-50">Start from your photo</span>
                   <button
@@ -669,7 +697,7 @@ export default function App() {
                 )}
               </div>
 
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest flex items-center gap-2">
+              <div className="section-label flex items-center gap-2">
                 <Layers className="size-3.5" /> Layers
               </div>
 
@@ -709,7 +737,7 @@ export default function App() {
                     value={subjectPrompt}
                     onChange={(e) => setSubjectPrompt(e.target.value)}
                     placeholder="lone astronaut, rose, statue..."
-                    className="flex-1 rounded-lg bg-[#1E1E28] border border-white/10 px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                    className="flex-1 rounded-lg panel-inset px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                   />
                   <button
                     onClick={() => makeSubject()}
@@ -758,7 +786,7 @@ export default function App() {
                 <textarea
                   value={direction}
                   onChange={(e) => setDirection(e.target.value)}
-                  className="min-h-16 w-full resize-none rounded-lg bg-[#1E1E28] border border-white/10 px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                  className="min-h-16 w-full resize-none rounded-lg panel-inset px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                 />
               </Row>
             </div>

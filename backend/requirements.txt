@@ -1,0 +1,50 @@
+# Rollout Python engine — reproducible dependency manifest.
+# Pinned to the working ~/ear-env (macOS, Python 3.11, CPU torch build).
+#
+# NOT installed by pip (pull on first use, cached under ~/.cache):
+#   - LAION-CLAP music checkpoint  (~2 GB, vibe.py)
+#   - Whisper 'small'              (align.py, via stable-ts)
+#   - demucs 'htdemucs'            (~80 MB, align.py vocal isolation)
+# System deps required OUTSIDE pip:
+#   - ffmpeg + ffprobe             (audio cut + video mux)
+#   - Node + `npm install` in ../video   (only for the premium Remotion lyric video)
+#
+# On a Linux/CPU cloud host install torch from the CPU wheel index to avoid
+# pulling multi-GB CUDA builds:
+#   pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+
+# --- web server ---
+fastapi==0.140.0
+uvicorn==0.51.0
+starlette==1.3.1
+pydantic==2.13.4
+python-multipart==0.0.32
+
+# --- audio / DSP ---
+librosa==0.11.0
+numpy==1.26.4
+scipy==1.17.1
+soundfile==0.14.0
+numba==0.62.1
+llvmlite==0.45.1
+
+# --- ML: mood/genre (CLAP) + word alignment (whisper / demucs) ---
+torch==2.2.2
+torchaudio==2.2.2
+transformers==4.30.2
+laion_clap==1.1.7
+openai-whisper==20250625
+stable-ts==2.19.1
+demucs==4.1.0
+julius==0.2.8
+
+# --- image: background removal / cut-out ---
+# 2.0.67 is the last release that depends on plain `numpy`; 2.0.77 hard-requires
+# numpy>=2.3, which collides with the numpy 1.26.4 that torch 2.2.2 needs.
+rembg==2.0.67
+onnxruntime==1.23.2
+pillow==12.3.0
+
+# --- http (image providers, stock footage) ---
+requests==2.34.2

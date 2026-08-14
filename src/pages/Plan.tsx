@@ -1,21 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Calendar,
   Check,
   Copy,
-  Layers,
   Link2,
   Loader2,
   Lock,
-  Package,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 type Caption = {
   id: string;
@@ -56,12 +50,12 @@ export default function App() {
     streamingLink: link, setStreamingLink: setLink,
   } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: ["dramatic light", "deep shadow", "film grain"],
   };
@@ -98,7 +92,7 @@ export default function App() {
         }),
       })
         .then((res) => res.json())
-        .then((j) => { if (!dead) setCaps(j.captions); })
+        .then((j) => { if (!dead) setCaps(Array.isArray(j.captions) ? j.captions : []); })
         .catch(() => { if (!dead) setErr("Caption engine offline — start the backend."); })
         .finally(() => { if (!dead) setLoading(false); });
     }, 400);
@@ -111,12 +105,16 @@ export default function App() {
       openUpgrade("Copy captions to clipboard");
       return;
     }
-    await navigator.clipboard.writeText(c.text);
-    setCopiedId(c.id);
-    setTimeout(() => setCopiedId(""), 1400);
+    try {
+      await navigator.clipboard.writeText(c.text);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId(""), 1400);
+    } catch { /* clipboard unavailable */ }
   };
 
-  // One-click publishing hand-off: caption to clipboard, platform opens.
+  // Hand-off: copy the caption to the clipboard and open the platform's
+  // composer so you paste and post. X pre-fills the text via its intent URL;
+  // the others open the upload screen (no platform offers public auto-posting).
   const SOCIALS: { key: string; label: string; url: (text: string) => string }[] = [
     { key: "tiktok", label: "TikTok", url: () => "https://www.tiktok.com/tiktokstudio/upload" },
     { key: "ig", label: "Reels", url: () => "https://www.instagram.com/" },
@@ -126,13 +124,15 @@ export default function App() {
 
   const handOff = async (c: Caption, s: (typeof SOCIALS)[number]) => {
     if (plan === "free") {
-      openUpgrade("One-click posting to your socials");
+      openUpgrade("Copy captions and jump straight to your socials");
       return;
     }
-    await navigator.clipboard.writeText(c.text);
-    setCopiedId(c.id);
-    setTimeout(() => setCopiedId(""), 1400);
-    window.open(s.url(c.text), "_blank");
+    try {
+      await navigator.clipboard.writeText(c.text);
+      setCopiedId(c.id);
+      setTimeout(() => setCopiedId(""), 1400);
+    } catch { /* clipboard blocked — still open the composer below */ }
+    window.open(s.url(c.text), "_blank", "noopener,noreferrer");
   };
 
   const sorted = [...caps].sort(
@@ -157,8 +157,8 @@ export default function App() {
 
         <div className="px-6 xl:px-12 py-8 flex flex-col gap-8 max-w-4xl">
           <div className="flex flex-col gap-2">
-            <h1 className="font-bold text-3xl tracking-tight">The dead zone, handled.</h1>
-            <p className="text-[#9A96AD] text-sm">
+            <h1 className="page-title text-[40px]">The dead zone, handled.</h1>
+            <p className="text-[#9A96AD] text-[15px] leading-relaxed">
               While the distributor processes, your calendar and captions are already written — seeded from the real vibe of {r.title}.
             </p>
           </div>
@@ -166,23 +166,23 @@ export default function App() {
           {/* controls: date + live link sync (Step 6) */}
           <div className="flex flex-wrap gap-6">
             <div className="flex flex-col gap-2">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Release date</div>
+              <div className="section-label">Release date</div>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500/40 [color-scheme:dark]"
+                className="rounded-lg panel-inset px-3 py-2 text-sm text-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500/40 [color-scheme:dark]"
               />
             </div>
             <div className="flex flex-col gap-2 flex-1 min-w-64">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest flex items-center gap-1.5">
+              <div className="section-label flex items-center gap-1.5">
                 <Link2 className="size-3" /> Streaming link (paste when live)
               </div>
               <input
                 value={link}
                 onChange={(e) => setLink(e.target.value)}
                 placeholder="https://open.spotify.com/track/..."
-                className="rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                className="rounded-lg panel-inset px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
               />
             </div>
           </div>
@@ -197,7 +197,7 @@ export default function App() {
 
           <div className="flex flex-col gap-4">
             {sorted.map((c) => (
-              <div key={c.id} className="rounded-2xl border border-white/10 bg-[#15151C] p-5 flex gap-5">
+              <div key={c.id} className="panel card-premium rounded-2xl p-5 flex gap-5">
                 <div className="shrink-0 w-20 text-center">
                   <div className="font-mono text-sm font-bold text-neutral-50">
                     {fmtDay(releaseDate, SCHEDULE[c.id] ?? 0)}
@@ -223,9 +223,9 @@ export default function App() {
                       </span>
                     ))}
                   </p>
-                  {/* one-click hand-off: copies caption, opens the platform */}
+                  {/* hand-off: copies the caption, opens the platform composer */}
                   <div className="mt-3 flex items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#5e5a72]">Post to</span>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#5e5a72]">Copy + open</span>
                     {SOCIALS.map((s) => (
                       <button
                         key={s.key}

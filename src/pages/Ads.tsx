@@ -3,16 +3,11 @@ import {
   Check,
   Copy,
   ExternalLink,
-  Layers,
-  Megaphone,
-  Package,
-  Settings,
-  Upload,
-  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ProGate from "@/components/ProGate";
 import { useStore, slugify } from "@/store";
+import { PUBLIC_BASE } from "@/lib/api";
 
 // Interest targeting seeds derived from the real vibe analysis
 const MOOD_INTERESTS: Record<string, string[]> = {
@@ -30,12 +25,12 @@ const MOOD_INTERESTS: Record<string, string[]> = {
 export default function App() {
   const { release } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: ["dramatic light", "deep shadow"],
     coverUrl: "",
@@ -45,8 +40,11 @@ export default function App() {
   const [budget, setBudget] = useState(10);
   const [copied, setCopied] = useState("");
 
-  const slug = slugify(`${r.artist}-${r.title}`) || "release";
-  const landing = `https://th3circle.app/r/${slug}`;
+  // must match the published fan-page slug (Landing.tsx) — id-suffixed, else ad
+  // clicks 404. Same public base as the rest of the app.
+  const base = slugify(`${r.artist}-${r.title}`) || "release";
+  const slug = r.id ? `${base}-${r.id.slice(0, 6)}` : base;
+  const landing = `${PUBLIC_BASE}/r/${slug}`;
 
   const interests = useMemo(() => {
     const out: string[] = [];
@@ -73,9 +71,11 @@ export default function App() {
   ];
 
   const copyField = async (label: string, value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(label);
-    setTimeout(() => setCopied(""), 1200);
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied(""), 1200);
+    } catch { /* clipboard unavailable — no-op */ }
   };
 
   return (
@@ -100,8 +100,8 @@ export default function App() {
 
           <div className="px-6 xl:px-12 py-8 flex flex-col gap-8 max-w-3xl">
             <div className="flex flex-col gap-2">
-              <h1 className="font-bold text-3xl tracking-tight">Point ads at a page you own.</h1>
-              <p className="text-[#9A96AD] text-sm">
+              <h1 className="page-title text-[40px]">Point ads at a page you own.</h1>
+              <p className="text-[#9A96AD] text-[15px] leading-relaxed">
                 Rollout builds the whole campaign from your vibe — audience, copy, creative, budget — aimed at your Th3Circle page instead of a streaming app that keeps the fan data.
               </p>
             </div>
@@ -109,7 +109,7 @@ export default function App() {
             {/* objective + budget */}
             <div className="flex flex-wrap items-end gap-8">
               <div className="flex flex-col gap-2">
-                <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Phase</div>
+                <div className="section-label">Phase</div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setObjective("pre")}
@@ -126,7 +126,7 @@ export default function App() {
                 </div>
               </div>
               <div className="flex flex-col gap-2 flex-1 min-w-56">
-                <div className="uppercase text-[#9A96AD] text-xs tracking-widest">
+                <div className="section-label">
                   Daily budget — <span className="text-neutral-50 font-bold">${budget}/day</span> (~${budget * 30}/mo)
                 </div>
                 <input
@@ -139,8 +139,8 @@ export default function App() {
 
             {/* the generated campaign */}
             <div className="flex flex-col gap-3">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Your campaign (click any field to copy)</div>
-              <div className="rounded-2xl border border-white/10 bg-[#15151C] divide-y divide-white/5">
+              <div className="section-label">Your campaign (click any field to copy)</div>
+              <div className="panel rounded-2xl divide-y divide-white/5">
                 {campaign.map(([label, value]) => (
                   <button
                     key={label}
@@ -161,16 +161,16 @@ export default function App() {
 
             {/* launch */}
             <div className="flex flex-col gap-3">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Launch</div>
+              <div className="section-label">Launch</div>
               <div className="flex gap-3">
                 <Button
-                  onClick={() => window.open("https://adsmanager.facebook.com/adsmanager/manage/campaigns", "_blank")}
+                  onClick={() => window.open("https://adsmanager.facebook.com/adsmanager/manage/campaigns", "_blank", "noopener,noreferrer")}
                   className="bg-[#1877F2] text-white gap-2"
                 >
                   <ExternalLink className="size-4" />Open Meta Ads Manager
                 </Button>
                 <Button
-                  onClick={() => window.open("https://ads.google.com/aw/campaigns/new", "_blank")}
+                  onClick={() => window.open("https://ads.google.com/aw/campaigns/new", "_blank", "noopener,noreferrer")}
                   variant="ghost"
                   className="border border-white/10 text-neutral-50 gap-2"
                 >

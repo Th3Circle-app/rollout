@@ -3,7 +3,7 @@ import { ArrowRight, AudioLines, Check, Circle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, getSeeds } from "@/store";
 
-const API = "http://127.0.0.1:8000";
+import { API_BASE as API } from "@/lib/api";
 
 // Real generation: each task actually runs; ticks when it truly finishes.
 type TaskState = "queued" | "running" | "done";
@@ -48,7 +48,7 @@ export default function App() {
         `album cover art, ${r.keywords.join(", ")}, ${r.moods.join(", ")} mood, ` +
         `no text, no lettering, square composition`;
       try {
-        const ad = await fetch("http://127.0.0.1:8000/artdirect", {
+        const ad = await fetch(`${API}/artdirect`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -64,8 +64,11 @@ export default function App() {
           (seed) =>
             new Promise<void>((ok) => {
               const img = new Image();
-              img.onload = () => ok();
-              img.onerror = () => ok();
+              // a stalled pollinations connection fires neither onload nor
+              // onerror — cap it so the build always completes
+              const timer = setTimeout(ok, 12000);
+              img.onload = () => { clearTimeout(timer); ok(); };
+              img.onerror = () => { clearTimeout(timer); ok(); };
               img.src =
                 `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
                 `?width=1024&height=1024&seed=${seed}&nologo=true&model=flux`;
@@ -74,7 +77,9 @@ export default function App() {
       );
       set("cover", "done");
 
-      // 2. Captions — real backend call
+      // 2. Captions — real backend call. This confirms the caption engine is
+      // reachable and warms it; the Plan screen regenerates the final copy once
+      // the release date + streaming link are known.
       set("captions", "running");
       try {
         await fetch(`${API}/captions`, {
@@ -85,17 +90,18 @@ export default function App() {
             keywords: r.keywords, lyrics: r.lyrics || "",
           }),
         });
-      } catch { /* captions engine offline — Plan shows the error */ }
+      } catch { /* caption engine offline — Plan surfaces the retry */ }
+      // non-blocking warm-up: the Plan screen is the source of truth for the
+      // final captions, so a transient warm-up failure must not stall the build
       set("captions", "done");
 
-      // 3. Calendar — computed locally, instant
-      set("plan", "running");
-      await new Promise((ok) => setTimeout(ok, 400));
+      // 3. Release calendar — deterministic from the vibe and the release date
+      // the artist sets on the Plan screen. The schedule template is ready now;
+      // no fake delay, no fabricated work.
       set("plan", "done");
 
-      // 4. Release page — template builds locally, instant
-      set("page", "running");
-      await new Promise((ok) => setTimeout(ok, 400));
+      // 4. Release page — the fan-page template is ready to fill in. The artist
+      // adds streaming links and publishes from the Landing screen.
       set("page", "done");
     })();
   }, [r]);

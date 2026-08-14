@@ -1,17 +1,9 @@
-import { useMemo, useState } from "react";
-import {
-  Check,
-  Copy,
-  Download,
-  Layers,
-  Link2,
-  Package,
-  Settings,
-  Upload,
-  Zap,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Copy, Download, Globe, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, slugify } from "@/store";
+import { supabase } from "@/lib/supabase";
+import { PUBLIC_BASE } from "@/lib/api";
 
 type Link = { key: string; label: string; color: string; url: string };
 
@@ -29,7 +21,9 @@ function esc(s: string) {
 function buildHtml(o: {
   title: string; artist: string; cover: string; date: string; links: Link[];
 }) {
-  const active = o.links.filter((l) => l.url.trim());
+  // only real http(s) links — drops javascript:/data:/etc. so a pasted
+  // "javascript:..." can't become an executable href
+  const active = o.links.filter((l) => /^https?:\/\//i.test(l.url.trim()));
   const buttons = active
     .map(
       (l) => `      <a class="btn" style="--c:${l.color}" href="${esc(l.url.trim())}" target="_blank" rel="noopener">
@@ -84,14 +78,14 @@ ${buttons || '      <div class="foot">Add your streaming links to get started</d
 }
 
 export default function App() {
-  const { release } = useStore();
+  const { release, session } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: ["dramatic light", "deep shadow", "film grain"],
     coverUrl:
@@ -101,8 +95,15 @@ export default function App() {
   const [links, setLinks] = useState<Link[]>(DEFAULT_LINKS);
   const [date, setDate] = useState("");
   const [copied, setCopied] = useState(false);
+  const [pubState, setPubState] = useState<"idle" | "publishing" | "done" | "err">("idle");
 
-  const slug = slugify(`${r.artist}-${r.title}`) || "release";
+  // fan-page slug is suffixed with a slice of the cloud release id so two
+  // artists with the same title never collide on one public URL
+  const baseSlug = slugify(`${r.artist}-${r.title}`) || "release";
+  const slug = r.id ? `${baseSlug}-${r.id.slice(0, 6)}` : baseSlug;
+  const publicUrl = `${PUBLIC_BASE}/r/${slug}`;
+  const publicHost = publicUrl.replace(/^https?:\/\//, "");
+  const canPublish = Boolean(supabase && session && r.id);
   const cover = r.coverUrl || "";
 
   const html = useMemo(
@@ -113,23 +114,37 @@ export default function App() {
   const setUrl = (key: string, url: string) =>
     setLinks((ls) => ls.map((l) => (l.key === key ? { ...l, url } : l)));
 
-  const download = async () => {
-    // Inline the cover as a data URI so the exported page can never lose its
-    // art to a purged remote URL — the file is fully self-contained.
-    let exportHtml = html;
-    if (cover) {
-      try {
-        const res = await fetch(cover);
-        const blob = await res.blob();
-        const dataUri: string = await new Promise((ok, err) => {
-          const fr = new FileReader();
-          fr.onload = () => ok(String(fr.result));
-          fr.onerror = () => err(new Error("read failed"));
-          fr.readAsDataURL(blob);
-        });
-        exportHtml = buildHtml({ title: r.title, artist: r.artist, cover: dataUri, date, links });
-      } catch { /* keep URL version rather than fail the export */ }
+  // editing the page after publishing makes the live version stale — nudge a
+  // republish by dropping the "done" badge whenever the content changes
+  useEffect(() => {
+    setPubState((s) => (s === "done" ? "idle" : s));
+  }, [html]);
+
+  // Build the fully self-contained HTML (cover inlined as a data URI so the
+  // page can never lose its art to a purged remote URL). Falls back to the URL
+  // version if the cover can't be fetched. Used by both download and publish.
+  const selfContainedHtml = async (): Promise<string> => {
+    if (!cover) return html;
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000); // don't hang Publish on a stalled cover
+      const res = await fetch(cover, { signal: ctrl.signal });
+      const blob = await res.blob();
+      clearTimeout(to);
+      const dataUri: string = await new Promise((ok, err) => {
+        const fr = new FileReader();
+        fr.onload = () => ok(String(fr.result));
+        fr.onerror = () => err(new Error("read failed"));
+        fr.readAsDataURL(blob);
+      });
+      return buildHtml({ title: r.title, artist: r.artist, cover: dataUri, date, links });
+    } catch {
+      return html;
     }
+  };
+
+  const download = async () => {
+    const exportHtml = await selfContainedHtml();
     const blob = new Blob([exportHtml], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -138,9 +153,34 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   };
 
+  // Publish to Supabase so the page is live at PUBLIC_BASE/r/{slug}. Upsert on
+  // slug; RLS (owner_all) guarantees an artist can only write their own row,
+  // and public_read exposes it to fans only once published = true.
+  const publish = async () => {
+    if (!supabase || !session || !r.id) return;
+    setPubState("publishing");
+    try {
+      const exportHtml = await selfContainedHtml();
+      const { error } = await supabase.from("rollout_fan_pages").upsert(
+        {
+          slug,
+          release_id: r.id,
+          artist_id: session.user.id,
+          html: exportHtml,
+          published: true,
+        },
+        { onConflict: "slug" }
+      );
+      if (error) throw error;
+      setPubState("done");
+    } catch {
+      setPubState("err");
+    }
+  };
+
   const copyLink = async () => {
     try {
-      await navigator.clipboard.writeText(`https://th3circle.app/r/${slug}`);
+      await navigator.clipboard.writeText(publicUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -158,8 +198,9 @@ export default function App() {
             <span className="text-[#9A96AD]/50 mx-1">/</span>
             <span className="text-neutral-50">Landing Page</span>
           </div>
-          <div className="font-mono rounded-full bg-[#15151C] text-[#9A96AD] text-xs border-white/10 border-1 border-solid px-3 py-1.5">
-            th3circle.app/r/{slug}
+          <div className="font-mono rounded-full bg-[#15151C] text-[#9A96AD] text-xs border-white/10 border-1 border-solid px-3 py-1.5 flex items-center gap-2">
+            {pubState === "done" && <span className="size-1.5 rounded-full bg-[#46E0A8]" />}
+            {publicHost}
           </div>
         </div>
 
@@ -170,6 +211,7 @@ export default function App() {
               <iframe
                 title="Landing preview"
                 srcDoc={html}
+                sandbox="allow-popups"
                 className="rounded-3xl bg-black"
                 style={{ width: 300, height: 600, border: "none" }}
               />
@@ -213,12 +255,42 @@ export default function App() {
             </div>
 
             <div className="border-white/10 border-t-1 border-solid flex pt-6 flex-col gap-3">
-              <Button onClick={download} className="btn-glow text-white gap-2 w-full">
-                <Download className="size-4" />Download page (.html)
+              <Button
+                onClick={publish}
+                disabled={!canPublish || pubState === "publishing"}
+                className="btn-glow text-white gap-2 w-full disabled:opacity-50"
+              >
+                {pubState === "publishing" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
+                {pubState === "done" ? "Update live page" : pubState === "publishing" ? "Publishing…" : "Publish page"}
               </Button>
-              <Button onClick={copyLink} variant="ghost" className="text-[#9A96AD] gap-2 w-full">
+
+              {pubState === "done" && (
+                <div className="rounded-lg bg-[#46E0A8]/10 border border-[#46E0A8]/30 px-3 py-2 text-center text-[13px] text-[#46E0A8]">
+                  Live at <span className="font-mono">{publicHost}</span>
+                </div>
+              )}
+              {pubState === "err" && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-center text-[13px] text-red-400">
+                  Couldn't publish. Try again in a moment.
+                </div>
+              )}
+              {!canPublish && (
+                <div className="text-center text-[12px] text-[#5E5A72]">
+                  {supabase ? "Saving your release… publish unlocks in a moment." : "Sign in to publish a live page."}
+                </div>
+              )}
+
+              <Button
+                onClick={copyLink}
+                variant="ghost"
+                disabled={pubState !== "done"}
+                className="text-[#9A96AD] gap-2 w-full disabled:opacity-40"
+              >
                 {copied ? <Check className="size-4 text-[#46E0A8]" /> : <Copy className="size-4" />}
-                {copied ? "Link copied" : `Copy th3circle.app/r/${slug}`}
+                {copied ? "Link copied" : "Copy live link"}
+              </Button>
+              <Button onClick={download} variant="ghost" className="text-[#9A96AD] gap-2 w-full">
+                <Download className="size-4" />Download page (.html)
               </Button>
             </div>
           </div>

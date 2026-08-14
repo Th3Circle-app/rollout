@@ -101,7 +101,7 @@ type Store = {
 
 const Ctx = createContext<Store | null>(null);
 
-// Turn "Fail Safe Xkaii.wav" -> { title: "Fail Safe", artist: "Xkaii" }
+// Turn "Afterglow Nova.wav" -> { title: "Afterglow", artist: "Nova" }
 export function deriveTitleArtist(filename: string) {
   const base = filename.replace(/\.[^.]+$/, "").trim();
   // common patterns: "Title - Artist", "Artist - Title", "Title Artist"
@@ -117,6 +117,11 @@ export function deriveTitleArtist(filename: string) {
 }
 
 function loadPlan(): Plan {
+  // Cloud mode: the plan is server truth (Stripe webhook -> DB -> hydration).
+  // Never seed it from localStorage — a user could set rollout_plan="studio"
+  // and unlock paid UI in the window before the profile hydrates. Start free
+  // and let the sign-in hydration set the real plan.
+  if (cloudEnabled) return "free";
   try {
     const p = localStorage.getItem("rollout_plan");
     if (p === "pro" || p === "studio") return "studio"; // migrate old demo value
@@ -296,7 +301,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const sb = supabase;
     const t = setTimeout(async () => {
       const id = release.id || crypto.randomUUID();
-      if (!release.id) setReleaseState({ ...release, id }); // keep id locally (avoid loop via direct state)
+      // persist the id (localStorage + state), else a reload before the next
+      // setRelease loses it and mints a new UUID -> a duplicate rollout_releases row
+      if (!release.id) setRelease({ ...release, id });
       await sb.from("rollout_releases").upsert({
         id,
         artist_id: session.user.id,
@@ -308,7 +315,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         cover_url: release.coverUrl || "",
         release_date: releaseDate || null,
         streaming_link: streamingLink || "",
-        slug: slugify(`${release.artist}-${release.title}`) || null,
+        // suffix with the id slice so two artists with the same "Artist - Title"
+        // don't collide on the GLOBAL-unique slug column (which would silently
+        // fail the second artist's save)
+        slug: (slugify(`${release.artist}-${release.title}`) || "release") + "-" + id.slice(0, 6),
       });
     }, 900);
     return () => clearTimeout(t);

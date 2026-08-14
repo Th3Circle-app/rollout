@@ -23,13 +23,14 @@ function useCountdown(target: string) {
 export default function App() {
   const { release, go, releaseDate, streamingLink } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav", title: "Fail Safe", artist: "Xkaii",
-    key: "C minor", bpm: 99, duration: "3:56",
+    filename: "Afterglow Nova.wav", title: "Afterglow", artist: "Nova",
+    key: "A minor", bpm: 120, duration: "3:24",
     moods: [], keywords: [], coverUrl: "", lyrics: "",
   };
   const cd = useCountdown(releaseDate);
+  const relKey = (r.artist + "-" + r.title).toLowerCase().replace(/\s+/g, "-");
   const [scheduled, setScheduled] = useState<boolean>(() => {
-    try { return localStorage.getItem("rollout_scheduled") === "1"; } catch { return false; }
+    try { return localStorage.getItem(`rollout_scheduled_${relKey}`) === "1"; } catch { return false; }
   });
 
   let submitted = false;
@@ -45,9 +46,13 @@ export default function App() {
     { label: "Distribution", ok: submitted },
     { label: "Release Page", ok: Boolean(streamingLink) },
   ];
-  const DIST = ["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p, i) => ({
+  // A platform only reads "live" once the release is actually out (a streaming
+  // link exists). Rollout hands off to a distributor and can't know per-platform
+  // status before then, so we don't fake individual checkmarks.
+  const distLive = Boolean(streamingLink);
+  const DIST = ["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p) => ({
     label: p,
-    ok: streamingLink ? true : submitted && i < 2,
+    ok: distLive,
   }));
 
   const dateLabel = releaseDate
@@ -56,7 +61,7 @@ export default function App() {
 
   const schedule = () => {
     setScheduled(true);
-    try { localStorage.setItem("rollout_scheduled", "1"); } catch { /* ignore */ }
+    try { localStorage.setItem(`rollout_scheduled_${relKey}`, "1"); } catch { /* ignore */ }
   };
 
   const Cell = ({ v, unit, violet }: { v: number; unit: string; violet?: boolean }) => (
@@ -87,12 +92,12 @@ export default function App() {
         <span className="font-medium uppercase text-[#46E0A8] text-xs leading-4 tracking-[3.2px]">
           Ready to launch
         </span>
-        <h1 className="leading-tight font-bold text-[#F2F0F7] text-5xl leading-12 tracking-tight">
+        <h1 className="page-title text-[52px]">
           Everything's ready. Ship it.
         </h1>
       </div>
 
-      <div className="max-w-[720px] edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid flex mb-8 p-6 items-center gap-6 w-full">
+      <div className="max-w-[720px] panel rounded-2xl flex mb-8 p-6 items-center gap-6 w-full">
         <div className="size-24 shrink-0 rounded-xl overflow-hidden bg-[#1E1E28]">
           {r.coverUrl ? (
             <img alt={`${r.title} cover art`} className="object-cover w-full h-full" src={r.coverUrl} />
@@ -109,7 +114,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="max-w-[720px] edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid flex mb-12 p-8 flex-col items-center gap-3 w-full">
+      <div className="max-w-[720px] panel rounded-2xl flex mb-12 p-8 flex-col items-center gap-3 w-full">
         <span className="font-mono uppercase text-[#5E5A72] text-xs leading-4 tracking-[2.4px]">
           {dateLabel ? `Releases ${dateLabel}` : "Set your release date on the Release Plan"}
         </span>
@@ -131,7 +136,7 @@ export default function App() {
       </div>
 
       <div className="max-w-[720px] grid grid-cols-2 mb-8 gap-6 w-full">
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6">
+        <div className="panel rounded-2xl p-6">
           <span className="block font-medium uppercase text-[#5E5A72] text-xs leading-4 tracking-[3.2px] mb-4">
             Going live
           </span>
@@ -157,7 +162,7 @@ export default function App() {
             ))}
           </div>
         </div>
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6">
+        <div className="panel rounded-2xl p-6">
           <span className="block font-medium uppercase text-[#5E5A72] text-xs leading-4 tracking-[3.2px] mb-4">
             Distribution
           </span>
@@ -176,6 +181,13 @@ export default function App() {
                 <span className={(d.ok ? "text-[#F2F0F7]" : "text-[#9A96AD]") + " text-sm leading-5"}>{d.label}</span>
               </div>
             ))}
+            <span className="mt-1 block text-[11px] leading-4 text-[#5E5A72]">
+              {distLive
+                ? "Live on all platforms."
+                : submitted
+                  ? "Submitted to your distributor. Platforms go live on release day."
+                  : "Submit through Distribution to go live."}
+            </span>
           </div>
         </div>
       </div>
@@ -184,18 +196,18 @@ export default function App() {
         <Button
           onClick={schedule}
           disabled={scheduled || !releaseDate}
-          className="font-semibold rounded-2xl bg-violet-500 hover:bg-[#7c4dec] text-white text-base leading-6 flex justify-center items-center gap-2 w-full h-14 disabled:opacity-50"
+          className="btn-primary font-semibold rounded-2xl text-white text-base leading-6 flex justify-center items-center gap-2 w-full h-14 disabled:opacity-50 disabled:shadow-none"
         >
           <span>{scheduled ? "Release scheduled" : "Schedule release"}</span>
           {!scheduled && <ArrowRight className="size-4" />}
         </Button>
         {scheduled && dateLabel ? (
           <span className="text-[#46E0A8] text-sm leading-5">
-            Your release has been scheduled for {dateLabel}.
+            Locked in for {dateLabel}. Your distributor pushes the track live that day, and your promo plan is ready in Release Plan.
           </span>
         ) : (
           <span className="text-[#5E5A72] text-sm leading-5">
-            {dateLabel ? `Everything goes live automatically on ${dateLabel}.` : "Pick a date to schedule the release."}
+            {dateLabel ? `Lock in ${dateLabel} and Rollout lines up your launch-day plan.` : "Pick a date to schedule the release."}
           </span>
         )}
       </div>
