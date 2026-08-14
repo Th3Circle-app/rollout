@@ -4,6 +4,10 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/fraunces";
 import "./index.css";
 import App from "./App";
+import { installAuthFetch } from "./lib/authFetch";
+
+// Attach the Supabase session token to engine calls before anything renders.
+installAuthFetch();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

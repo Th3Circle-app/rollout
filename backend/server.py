@@ -16,12 +16,71 @@ from analyze import analyze
 from captions import generate_captions
 
 app = FastAPI(title="Rollout API")
+
+# CORS is locked to the app origin(s) in prod via ALLOWED_ORIGINS (comma-sep);
+# unset ("*") keeps local dev open.
+_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Supabase auth gate ──────────────────────────────────────────────────────
+# The engine does heavy ML compute, so it must not be an open endpoint anyone
+# can spend. Every request (except /health + CORS preflight) must carry a valid
+# Supabase access token. We validate by introspection against GoTrue
+# (GET /auth/v1/user) rather than holding the project JWT secret; a hit caches
+# for 60s so a multi-call session doesn't re-introspect every request.
+# Enforcement is ON only when SUPABASE_URL + SUPABASE_ANON_KEY are set, so a
+# local dev engine (no env) keeps working exactly as before.
+_AUTH_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+_AUTH_ANON = os.environ.get("SUPABASE_ANON_KEY", "")
+_AUTH_ENABLED = bool(_AUTH_URL and _AUTH_ANON)
+_AUTH_OPEN_PATHS = {"/health"}
+_auth_cache: dict = {}  # access token -> epoch it's trusted until
+
+
+def _token_valid(tok: str) -> bool:
+    now = _time.time()
+    if _auth_cache.get(tok, 0) > now:
+        return True
+    try:
+        req = urllib.request.Request(
+            f"{_AUTH_URL}/auth/v1/user",
+            headers={"Authorization": f"Bearer {tok}", "apikey": _AUTH_ANON},
+        )
+        with urllib.request.urlopen(req, timeout=6) as r:
+            if r.status == 200:
+                if len(_auth_cache) > 1000:  # prune expired entries occasionally
+                    for k, v in list(_auth_cache.items()):
+                        if v <= now:
+                            _auth_cache.pop(k, None)
+                _auth_cache[tok] = now + 60
+                return True
+    except Exception:
+        return False
+    return False
+
+
+class _AuthGate(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        if (not _AUTH_ENABLED or request.method == "OPTIONS"
+                or request.url.path in _AUTH_OPEN_PATHS):
+            return await call_next(request)
+        authz = request.headers.get("authorization", "")
+        tok = authz[7:].strip() if authz[:7].lower() == "bearer " else ""
+        if not tok:
+            return Response(status_code=401, content=b"auth required", media_type="text/plain")
+        from starlette.concurrency import run_in_threadpool
+        if not await run_in_threadpool(_token_valid, tok):
+            return Response(status_code=401, content=b"invalid or expired token", media_type="text/plain")
+        return await call_next(request)
+
+
+app.add_middleware(_AuthGate)
 
 
 # ── SSRF-safe fetch (IP-pinned, DNS-rebinding proof) — shared in netguard.py ──
