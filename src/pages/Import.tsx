@@ -95,10 +95,10 @@ export default function App() {
           </div>
 
           <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
-            <div className="max-w-[720px] text-center flex mb-10 flex-col items-center gap-3 w-full">
-              <span className="font-semibold uppercase text-violet-500 text-[11px] tracking-[3.2px]">New Release</span>
-              <h1 className="font-bold text-[#F2F0F7] text-5xl leading-12 tracking-tight">Start a release.</h1>
-              <p className="text-[#9A96AD] text-base leading-6">Drop a finished track. Rollout reads it and builds the rest.</p>
+            <div className="hero-glow max-w-[720px] text-center flex mb-10 flex-col items-center gap-4 w-full">
+              <span className="kicker kicker-center relative z-10">New Release</span>
+              <h1 className="page-title relative z-10 text-[52px]">Start a release.</h1>
+              <p className="relative z-10 text-[#9A96AD] text-[17px] leading-7">Drop a finished track. Rollout reads it and builds the rest.</p>
             </div>
 
             <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={onPick} />
@@ -109,7 +109,7 @@ export default function App() {
                 onClick={() => fileRef.current?.click()}
                 onDrop={onDrop}
                 onDragOver={(e) => e.preventDefault()}
-                className="max-w-[720px] edge rounded-3xl bg-[#15151C] border-white/16 border-1 border-dashed flex p-16 flex-col items-center gap-4 w-full cursor-pointer hover:border-violet-500/60 transition-colors"
+                className="panel border-dashed border-white/10 max-w-[720px] rounded-3xl flex p-16 flex-col items-center gap-4 w-full cursor-pointer hover:border-violet-500/50 transition-colors"
               >
                 <div className="size-14 rounded-2xl bg-[#1E1E28] border-white/8 border-1 border-solid flex justify-center items-center">
                   <Upload className="size-6 text-violet-500" />
@@ -121,7 +121,7 @@ export default function App() {
 
             {/* ANALYZING / DONE / ERROR: result card */}
             {status !== "idle" && (
-              <div className="max-w-[720px] edge rounded-3xl bg-[#15151C] border-white/16 border-1 border-dashed flex p-10 flex-col gap-8 w-full">
+              <div className="panel max-w-[720px] rounded-3xl flex p-10 flex-col gap-8 w-full">
                 <div className="flex justify-between items-start gap-6">
                   <div className="flex items-center gap-4">
                     <div className="size-12 rounded-2xl bg-[#1E1E28] border-white/8 border-1 border-solid flex justify-center items-center">
@@ -241,7 +241,7 @@ export default function App() {
                   setRelease({ ...refined, title, artist: artist || "", lyrics: lyrics.trim() });
                   go("Build"); // original flow: Import -> Building -> Ready -> hub
                 }}
-                className="font-semibold rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40"
+                className="btn-primary font-semibold rounded-xl text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40 disabled:shadow-none"
               >
                 Build my rollout <ArrowRight className="size-4" />
               </Button>

@@ -39,14 +39,14 @@ const FONTS = ["Arial Black", "Georgia", "Courier New", "Helvetica Neue"];
 export default function App() {
   const { release, setRelease, go, plan, openUpgrade } = useStore();
 
-  // Fall back to Fail Safe so the screen still demos if opened directly.
+  // Fall back to Afterglow so the screen still demos if opened directly.
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: ["dramatic light", "deep shadow", "film grain", "dark tones", "neon glow"],
   };
@@ -474,7 +474,7 @@ export default function App() {
     k: keyof LayerStack;
     children?: React.ReactNode;
   }) => (
-    <div className="rounded-xl border border-white/10 bg-[#15151C] p-3 flex flex-col gap-2.5">
+    <div className="rounded-xl panel-inset p-3 flex flex-col gap-2.5">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-neutral-50">{name}</span>
         <button aria-label={`Toggle ${name} layer`} onClick={() => patch(k, { visible: !layers[k].visible } as never)}>
@@ -586,7 +586,7 @@ export default function App() {
           <div className="flex px-6 xl:px-12 py-8 items-start gap-8">
             {/* base variants — Screen 6 style: rounded-2xl + amber AI badge */}
             <div className="shrink-0 flex flex-col gap-4 w-32">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest mb-1">Options</div>
+              <div className="section-label mb-1">Options</div>
               {[0, 1, 2, 3].map((i) => (
                 <button
                   key={i}
@@ -630,7 +630,7 @@ export default function App() {
 
             {/* live composite preview */}
             <div className="flex flex-col items-center gap-3">
-              <div className="relative aspect-square rounded-3xl border-white/10 border-1 border-solid w-80 xl:w-105 overflow-hidden bg-[#15151C]">
+              <div className="relative aspect-square rounded-3xl panel w-80 xl:w-105 overflow-hidden">
                 <canvas ref={canvasRef} className="w-full h-full" />
               </div>
               <div className="font-mono text-[#9A96AD] text-xs">
@@ -646,7 +646,7 @@ export default function App() {
                     setRelease({ ...r, coverUrl: urls[selected] });
                     go("Distribute"); // doc order: cover -> distributor hand-off
                   }}
-                  className="btn-glow text-white"
+                  className="btn-primary text-white"
                 >
                   Use this cover
                 </Button>
@@ -654,9 +654,9 @@ export default function App() {
             </div>
 
             {/* layers panel */}
-            <div className="shrink-0 edge rounded-2xl bg-[#15151C] border-white/10 border-1 border-solid flex p-5 flex-col gap-3 w-80">
+            <div className="shrink-0 panel rounded-2xl flex p-5 flex-col gap-3 w-80">
               {/* start from a photo */}
-              <div className="rounded-xl border border-white/10 bg-[#15151C] p-3 flex flex-col gap-2.5">
+              <div className="rounded-xl panel-inset p-3 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-50">Start from your photo</span>
                   <button
@@ -697,7 +697,7 @@ export default function App() {
                 )}
               </div>
 
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest flex items-center gap-2">
+              <div className="section-label flex items-center gap-2">
                 <Layers className="size-3.5" /> Layers
               </div>
 
@@ -737,7 +737,7 @@ export default function App() {
                     value={subjectPrompt}
                     onChange={(e) => setSubjectPrompt(e.target.value)}
                     placeholder="lone astronaut, rose, statue..."
-                    className="flex-1 rounded-lg bg-[#1E1E28] border border-white/10 px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                    className="flex-1 rounded-lg panel-inset px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                   />
                   <button
                     onClick={() => makeSubject()}
@@ -786,7 +786,7 @@ export default function App() {
                 <textarea
                   value={direction}
                   onChange={(e) => setDirection(e.target.value)}
-                  className="min-h-16 w-full resize-none rounded-lg bg-[#1E1E28] border border-white/10 px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                  className="min-h-16 w-full resize-none rounded-lg panel-inset px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                 />
               </Row>
             </div>

@@ -101,7 +101,7 @@ type Store = {
 
 const Ctx = createContext<Store | null>(null);
 
-// Turn "Fail Safe Xkaii.wav" -> { title: "Fail Safe", artist: "Xkaii" }
+// Turn "Afterglow Nova.wav" -> { title: "Afterglow", artist: "Nova" }
 export function deriveTitleArtist(filename: string) {
   const base = filename.replace(/\.[^.]+$/, "").trim();
   // common patterns: "Title - Artist", "Artist - Title", "Title Artist"

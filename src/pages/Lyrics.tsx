@@ -20,12 +20,12 @@ type Word = { word: string; start: number; end: number; conf?: number };
 export default function App() {
   const { release } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: [],
     coverUrl: "",
@@ -163,8 +163,8 @@ export default function App() {
             {/* controls */}
             <div className="flex flex-col gap-6 max-w-xl flex-1">
               <div className="flex flex-col gap-2">
-                <h1 className="font-bold text-3xl tracking-tight">Cut the hook.</h1>
-                <p className="text-[#9A96AD] text-sm">
+                <h1 className="page-title text-[40px]">Cut the hook.</h1>
+                <p className="text-[#9A96AD] text-[15px] leading-relaxed">
                   Auto-detect the words straight from your vocal, fix anything it misheard, and render a karaoke-style clip with exact timing.
                 </p>
               </div>
@@ -183,7 +183,7 @@ export default function App() {
               )}
 
               {/* step 1 — detect */}
-              <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-5 flex flex-col gap-4">
+              <div className="panel rounded-2xl p-5 flex flex-col gap-4">
                 <div className="flex items-center justify-between">
                   <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">
                     1 · Detect the words
@@ -243,7 +243,7 @@ export default function App() {
               </div>
 
               {/* step 2 — correct with real lyrics */}
-              <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-5 flex flex-col gap-3">
+              <div className="panel rounded-2xl p-5 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px] flex items-center gap-2">
                     2 · Or fix with your lyrics

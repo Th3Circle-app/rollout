@@ -92,12 +92,12 @@ export default function App() {
       </div>
       <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-col gap-8 max-w-[720px]">
         <div className="flex flex-col gap-2">
-          <h1 className="font-bold text-[#F2F0F7] text-4xl leading-10 tracking-tight">Settings</h1>
+          <h1 className="page-title text-[38px]">Settings</h1>
           <p className="text-[#9A96AD] text-sm leading-5">Your plan, usage, and engine status.</p>
         </div>
 
         {/* plan */}
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex flex-col gap-5">
+        <div className="panel rounded-2xl p-6 flex flex-col gap-5">
           <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Plan</span>
           <div className="flex items-center justify-between">
             <div className="flex flex-col gap-1">
@@ -113,12 +113,12 @@ export default function App() {
               </span>
             </div>
             {plan === "free" ? (
-              <Button onClick={() => openUpgrade("Unlock the full rollout")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white gap-2">
+              <Button onClick={() => openUpgrade("Unlock the full rollout")} className="btn-primary rounded-xl text-white gap-2">
                 <Sparkles className="size-4" />
                 Upgrade
               </Button>
             ) : plan === "artist" ? (
-              <Button onClick={() => openUpgrade("Step up to Studio")} className="rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white gap-2">
+              <Button onClick={() => openUpgrade("Step up to Studio")} className="btn-primary rounded-xl text-white gap-2">
                 <Sparkles className="size-4" />
                 Get Studio
               </Button>
@@ -150,7 +150,7 @@ export default function App() {
         </div>
 
         {/* current release */}
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex flex-col gap-4">
+        <div className="panel rounded-2xl p-6 flex flex-col gap-4">
           <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Current release</span>
           {release ? (
             <div className="flex flex-col gap-1">
@@ -168,7 +168,7 @@ export default function App() {
         </div>
 
         {/* AI image connections */}
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex flex-col gap-5">
+        <div className="panel rounded-2xl p-6 flex flex-col gap-5">
           <div className="flex items-center justify-between">
             <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">
               AI image generator
@@ -215,21 +215,21 @@ export default function App() {
                 value={conn.key}
                 onChange={(e) => saveConn({ key: e.target.value })}
                 placeholder={conn.provider === "aihorde" ? "API key (optional — anonymous works)" : "API key"}
-                className="rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                className="rounded-lg panel-inset px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
               />
               <div className="flex gap-2.5">
                 <input
                   value={conn.model}
                   onChange={(e) => saveConn({ model: e.target.value })}
                   placeholder="model (optional — sensible default used)"
-                  className="flex-1 rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                  className="flex-1 rounded-lg panel-inset px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
                 />
                 {(conn.provider === "custom" || conn.provider === "cloudflare") && (
                   <input
                     value={conn.base_url}
                     onChange={(e) => saveConn({ base_url: e.target.value })}
                     placeholder={conn.provider === "cloudflare" ? "Cloudflare account ID" : "https://api.yourprovider.com/v1"}
-                    className="flex-1 rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                    className="flex-1 rounded-lg panel-inset px-3 py-2 font-mono text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
                   />
                 )}
               </div>
@@ -254,7 +254,7 @@ export default function App() {
 
         {/* account */}
         {cloud && session && (
-          <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex items-center justify-between">
+          <div className="panel rounded-2xl p-6 flex items-center justify-between">
             <div className="flex flex-col gap-1">
               <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Account</span>
               <span className="font-mono text-[#5E5A72] text-xs leading-4">{session.user.email}</span>
@@ -266,7 +266,7 @@ export default function App() {
         )}
 
         {/* help & about */}
-        <div className="edge rounded-2xl bg-[#15151C] border-white/8 border-1 border-solid p-6 flex flex-col gap-5">
+        <div className="panel rounded-2xl p-6 flex flex-col gap-5">
           <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Help &amp; about</span>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="ghost" onClick={start} className="border border-white/8 text-[#9A96AD] hover:text-[#F2F0F7] gap-2 rounded-xl">

@@ -36,12 +36,12 @@ function loadState(slugKey: string) {
 export default function App() {
   const { release, go } = useStore();
   const r = release ?? {
-    filename: "Fail Safe Xkaii.wav",
-    title: "Fail Safe",
-    artist: "Xkaii",
-    key: "C minor",
-    bpm: 99,
-    duration: "3:56",
+    filename: "Afterglow Nova.wav",
+    title: "Afterglow",
+    artist: "Nova",
+    key: "A minor",
+    bpm: 120,
+    duration: "3:24",
     moods: ["emotional", "moody", "driving"],
     keywords: [],
     coverUrl: "",
@@ -109,15 +109,15 @@ export default function App() {
 
         <div className="px-6 xl:px-12 py-8 flex flex-col gap-8 max-w-3xl">
           <div className="flex flex-col gap-2">
-            <h1 className="font-bold text-3xl tracking-tight">Hand it to the distributor.</h1>
-            <p className="text-[#9A96AD] text-sm">
+            <h1 className="page-title text-[40px]">Hand it to the distributor.</h1>
+            <p className="text-[#9A96AD] text-[15px] leading-relaxed">
               Pick your distributor, copy your metadata straight in, and mark it submitted — Rollout starts the dead-zone plan the second you do.
             </p>
           </div>
 
           {/* 1. pick distributor */}
           <div className="flex flex-col gap-3">
-            <div className="uppercase text-[#9A96AD] text-xs tracking-widest">1 · Choose distributor</div>
+            <div className="section-label">1 · Choose distributor</div>
             <div className="grid grid-cols-2 gap-3">
               {DISTRIBUTORS.map((d) => (
                 <button
@@ -127,7 +127,7 @@ export default function App() {
                     "rounded-2xl border p-4 text-left transition-all " +
                     (picked === d.key
                       ? "border-violet-500 bg-violet-500/10 ring-1 ring-violet-500/40"
-                      : "border-white/10 bg-[#15151C] hover:border-white/20")
+                      : "panel card-premium hover:border-white/20")
                   }
                 >
                   <div className="flex items-center justify-between">
@@ -142,8 +142,8 @@ export default function App() {
 
           {/* 2. metadata to paste */}
           <div className="flex flex-col gap-3">
-            <div className="uppercase text-[#9A96AD] text-xs tracking-widest">2 · Your metadata (click to copy)</div>
-            <div className="rounded-2xl border border-white/10 bg-[#15151C] divide-y divide-white/5">
+            <div className="section-label">2 · Your metadata (click to copy)</div>
+            <div className="panel rounded-2xl divide-y divide-white/5">
               {META.map(([label, value]) => (
                 <button
                   key={label}
@@ -167,7 +167,7 @@ export default function App() {
 
           {/* 3. go submit */}
           <div className="flex flex-col gap-3">
-            <div className="uppercase text-[#9A96AD] text-xs tracking-widest">3 · Submit &amp; mark it</div>
+            <div className="section-label">3 · Submit &amp; mark it</div>
             <div className="flex items-center gap-3">
               <Button
                 disabled={!dist}

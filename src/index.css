@@ -196,6 +196,125 @@ body {
     Times, serif;
 }
 
+/* ── studio type + material system ──────────────────────────────────────────
+   The cinematic signature: page titles are set in Fraunces (high-contrast
+   editorial serif) like a film title card, against mono "slate" kickers and
+   an Inter body. Violet is pulled back to a rare signal — the kicker is
+   neutral, not violet, so no page opens by screaming the accent color. */
+
+.font-display {
+  font-family: "Fraunces Variable", "Fraunces", ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+}
+
+/* page title — big, tight, high-contrast serif; a lit title card */
+.page-title {
+  font-family: "Fraunces Variable", "Fraunces", ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+  font-variation-settings: "opsz" 144, "SOFT" 0, "WONK" 0;
+  font-weight: 450;
+  letter-spacing: -0.018em;
+  line-height: 1.02;
+  color: #f4f2fa;
+}
+
+/* mono slate kicker — the label above a title. Neutral by default; a short
+   tick sets it like a film slate instead of a violet all-caps eyebrow. */
+.kicker {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #726d86;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+}
+.kicker::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+/* centered heroes want the tick on both sides */
+.kicker-center::after {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* section label — mono rule-header inside a page ("1 · Choose distributor") */
+.section-label {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #6b667c;
+}
+
+/* instrument panel — the premium card material. An edge-lit surface with a
+   near-invisible top-down gradient and a real seated shadow, so panels read
+   as machined hardware instead of flat charcoal rectangles. */
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 46%),
+    #14131b;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 30px 64px -34px rgba(0, 0, 0, 0.85);
+}
+.panel-inset {
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* a soft, cinematic pool of light behind a hero title (very restrained) */
+.hero-glow {
+  position: relative;
+}
+.hero-glow::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 680px;
+  height: 340px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(50% 50% at 50% 50%, rgba(124, 77, 255, 0.13), rgba(11, 11, 15, 0) 72%);
+  filter: blur(8px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* refined primary action — flat violet with a lit top edge, not a glow blob */
+.btn-primary {
+  background: #7c4dec;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 30px -14px rgba(124, 77, 255, 0.7);
+  transition:
+    background 0.18s ease,
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.18s ease;
+}
+.btn-primary:hover {
+  background: #8b5cf6;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 40px -14px rgba(124, 77, 255, 0.85);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
 /* ── premium polish ─────────────────────────────────────────────────────── */
 
 /* film grain — a fixed, near-invisible texture that ties the whole page

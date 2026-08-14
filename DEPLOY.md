@@ -15,10 +15,13 @@ gated only on Stripe account clearance. Do these in order.
       the live prices. An unmapped active price now logs a warning + retries
       (won't silently leave a payer on free) — but the map should still be right.
 
-## 2. Backend engine (Dockerfile)
-- [ ] Deploy `backend/` (FastAPI) to the Python host. `backend/Dockerfile` is
-      ready (CPU torch, ffmpeg, libgomp1/libsndfile1/libglib2.0-0 for rembg).
-- [ ] Optional env: `PEXELS_KEY` (b-roll), provider keys are BYO per-creator.
+## 2. Backend engine (Fly.io — Dockerfile)
+- [ ] `backend/fly.toml` is ready (scale-to-zero, 4GB for the CLAP model,
+      persistent `/root/.cache` model volume). First deploy:
+      `cd backend && fly volumes create rollout_models --size 5 -r sjc && fly deploy`.
+      After that, `fly deploy` alone. Grab the URL (`https://rollout-engine.fly.dev`).
+- [ ] Optional secret: `fly secrets set PEXELS_KEY=...` (b-roll). Provider image
+      keys are BYO per-creator.
 - [ ] OPEN (tracked): the engine is currently unauthenticated + CORS `*`. Add
       Supabase-JWT verification before exposing it broadly (see REDTEAM.md).
 
