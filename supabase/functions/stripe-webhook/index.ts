@@ -82,6 +82,40 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Trial-ending reminder — Stripe fires this ~3 days before a trial converts.
+    // Email the user so the auto-charge is never a surprise (subscription
+    // compliance). Best-effort; never fails the webhook.
+    if (event.type === "customer.subscription.trial_will_end") {
+      try {
+        const sub = event.data?.object;
+        const { data: rows } = await db.from("rollout_artists").select("email").eq("stripe_customer_id", sub?.customer).limit(1);
+        const email = rows?.[0]?.email;
+        let resendKey = Deno.env.get("RESEND_API_KEY");
+        if (!resendKey) {
+          const { data: cfg } = await db.from("rollout_config").select("value").eq("key", "resend_api_key").limit(1);
+          resendKey = cfg?.[0]?.value;
+        }
+        if (email && resendKey) {
+          const trialEnd = sub?.trial_end
+            ? new Date(sub.trial_end * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric" })
+            : "soon";
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: "Rollout <support@xkaii.com>",
+              to: [email],
+              reply_to: "support@xkaii.com",
+              subject: "Your Rollout trial ends soon",
+              text: `Hi,\n\nYour Rollout trial ends on ${trialEnd}. After that it moves to the Artist plan at $15/month, billed automatically.\n\nWant to keep going? You're all set, no action needed.\nWant to stop? Cancel anytime before your trial ends from Settings and you won't be charged.\n\nManage your plan: https://rollout.th3circle.app/?page=Settings\n\n— Rollout`,
+            }),
+          });
+        }
+      } catch (e) {
+        console.error("trial reminder failed (non-fatal)", e);
+      }
+    }
+
     return new Response(note, { status });
   } catch (e) {
     console.error("webhook handling failed", e);
