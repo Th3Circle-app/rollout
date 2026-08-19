@@ -596,11 +596,12 @@ def lyric_video(
     font: str = Form("bold"),
     position: str = Form("center"),
     start: float = Form(-1),   # artist-chosen section start (sec); < 0 = auto hook
+    duration: float = Form(15),  # clip length; 25 is a Studio-tier upgrade, else 15
     file: UploadFile | None = File(None),
     authorization: str = Header(default=""),
 ):
-    """Render a 15s kinetic lyric video from the hook of the track. Plain def so
-    the long ffmpeg/Remotion render runs in the threadpool, not the event loop."""
+    """Render a kinetic lyric video (15s, or 25s on the Studio tier) from the
+    hook of the track. Plain def so the long ffmpeg render runs in the threadpool."""
     from lyricvideo import make_lyric_video, make_lyric_video_premium, make_lyric_video_broll
 
     audio_is_temp = False
@@ -649,6 +650,13 @@ def lyric_video(
     if not lyrics.strip() and not words_override:
         return Response(status_code=400, content=b"provide lyrics or detect the words first", media_type="text/plain")
 
+    # Studio-tier 25s clips: the renderers read lyricvideo.CLIP_SEC (a module
+    # global), so override it for THIS render only and restore it in finally.
+    # Safe because the single-job lock guarantees no concurrent render sees it.
+    import lyricvideo as _lv
+    _prev_clip = _lv.CLIP_SEC
+    _lv.CLIP_SEC = 25.0 if duration >= 20 else 15.0
+
     out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
     try:
         # The premium engine needs Remotion (Node), which is NOT bundled in this
@@ -685,6 +693,7 @@ def lyric_video(
         traceback.print_exc()
         return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
     finally:
+        _lv.CLIP_SEC = _prev_clip  # always restore the default clip length
         for p in ([out] + ([audio_path] if audio_is_temp else [])):
             try:
                 os.unlink(p)

@@ -50,6 +50,7 @@ export default function App() {
   const [brollUp, setBrollUp] = useState(false);
   const [font, setFont] = useState<string>("anton");
   const [position, setPosition] = useState<"center" | "top" | "bottom" | "random">("center");
+  const [duration, setDuration] = useState<15 | 25>(15); // 25s is a Studio-tier upgrade
   useEffect(() => {
     fetch(`${API}/health`).then((r) => r.json())
       .then((j) => setBrollUp(Boolean(j.broll))).catch(() => setBrollUp(false));
@@ -223,6 +224,7 @@ export default function App() {
     fd.append("font", v.font);
     fd.append("position", v.position);
     fd.append("start", String(sectionStart ?? -1));
+    fd.append("duration", String(duration));
     if (audioFile) fd.append("file", audioFile);
     else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
     const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
@@ -507,6 +509,27 @@ export default function App() {
                     {l}
                   </button>
                 ))}
+              </div>
+
+              {/* clip length — 25s is a Studio ($29) upgrade */}
+              <div className="flex items-center gap-2">
+                <span className="section-label">Length</span>
+                {([15, 25] as const).map((d) => {
+                  const locked = d === 25 && plan !== "studio";
+                  const active = duration === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => (locked ? openUpgrade("25-second lyric videos") : setDuration(d))}
+                      className={"rounded-full border px-3 py-1.5 text-xs font-medium transition-colors " +
+                        (active
+                          ? "border-violet-500 bg-violet-500/15 text-[#F2F0F7]"
+                          : "border-white/10 text-[#9A96AD] hover:border-white/20")}
+                    >
+                      {d}s{locked && <span className="ml-1.5 font-mono text-[9px] uppercase tracking-wider text-[#F0A45B]">Studio</span>}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* step 3 — render */}
