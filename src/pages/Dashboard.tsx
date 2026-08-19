@@ -1,4 +1,4 @@
-import { ArrowRight, Calendar, Check, Clapperboard, Film, Globe, Image as ImageIcon, Play, Share2 } from "lucide-react";
+import { ArrowRight, Calendar, Check, Clapperboard, Film, Globe, Image as ImageIcon, Music, Play, Share2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
 
@@ -11,11 +11,29 @@ function fmtDate(d: string) {
 
 export default function App() {
   const { release, go, releaseDate, streamingLink } = useStore();
-  const r = release ?? {
-    filename: "Afterglow Nova.wav", title: "Afterglow", artist: "Nova",
-    key: "A minor", bpm: 120, duration: "3:24",
-    moods: ["emotional", "moody", "driving"], keywords: [], coverUrl: "", lyrics: "",
-  };
+
+  // Empty account → invite to import, never a fake demo track.
+  if (!release) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-8 text-center">
+        <div className="grid size-16 place-items-center rounded-2xl bg-white/[0.05] border border-white/10">
+          <Music className="size-7 text-violet-300/80" />
+        </div>
+        <div className="flex flex-col gap-2 max-w-sm">
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">Start your first release</h1>
+          <p className="text-[#9A96AD] leading-relaxed">Drop a finished track and Rollout builds the cover, videos, plan, and fan page around it.</p>
+        </div>
+        <Button
+          onClick={() => go("Import")}
+          className="rounded-full h-11 px-7 gap-2 bg-white text-black font-semibold hover:bg-white/90"
+        >
+          <Upload className="size-4" /> Import a track
+        </Button>
+      </div>
+    );
+  }
+
+  const r = release;
 
   let submitted = false;
   try {

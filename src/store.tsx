@@ -323,13 +323,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!switched && release) {
           // Any locally-cached release that isn't backed by a cloud row for THIS
           // account is stale (deleted, or from another account) → drop it so a
-          // wiped/empty account never shows leftover content.
+          // wiped/empty account never shows leftover content. Fail-safe: if we
+          // can't positively confirm ownership (query error/no id), treat it as
+          // NOT owned and wipe — a stale query must never leave content behind.
           let owned = false;
           if (release.id) {
-            const { data } = await supabase
-              .from("rollout_releases").select("id")
-              .eq("id", release.id).eq("artist_id", uid).maybeSingle();
-            owned = Boolean(data);
+            try {
+              const { data } = await supabase
+                .from("rollout_releases").select("id")
+                .eq("id", release.id).eq("artist_id", uid).maybeSingle();
+              owned = Boolean(data);
+            } catch { owned = false; }
           }
           if (!owned) switched = true;
         }
