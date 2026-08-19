@@ -12,5 +12,9 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# Serverless functions (support chat -> support@xkaii.com via Resend)
+[functions]
+  directory = "netlify/functions"
+
 # The SPA + /r/{slug} public-route fallback lives in public/_redirects
 # (copied into dist/ at build time).

@@ -26,6 +26,7 @@ import GlassBackground from "./components/GlassBackground";
 import StarField from "./components/StarField";
 import RolloutLanding from "./components/RolloutLanding";
 import ErrorBoundary from "./components/ErrorBoundary";
+import SupportChat from "./components/SupportChat";
 
 // Fallback when a page component throws — recover instead of blanking the app.
 function PageError() {
@@ -155,6 +156,7 @@ function Shell() {
         </main>
       </div>
       <UpgradeModal />
+      <SupportChat />
     </div>
   );
 }

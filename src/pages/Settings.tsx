@@ -379,6 +379,9 @@ export default function App() {
           <p className="-mt-2 text-[#9A96AD] text-sm leading-6">
             The built-in generator is free. Add your own key for instant, unlimited covers — it stays on your device and is never stored.
           </p>
+          <p className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-2.5 text-[12px] leading-5 text-[#9A96AD]">
+            <span className="text-[#F2F0F7]">Don't have a key?</span> They're free to get and we walk you through it below. As Rollout grows, we'll add a built-in generator with included generations so you won't need your own key at all.
+          </p>
           {(["free", "paid"] as const).map((grp) => (
             <div key={grp} className="flex flex-col gap-2">
               <span className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">
@@ -519,7 +522,7 @@ export default function App() {
             </Button>
             <Button
               variant="ghost"
-              onClick={() => { window.location.href = "mailto:support@th3circle.app?subject=Rollout%20support"; }}
+              onClick={() => { window.location.href = "mailto:support@xkaii.com?subject=Rollout%20support"; }}
               className="border border-white/8 text-[#9A96AD] hover:text-[#F2F0F7] gap-2 rounded-xl"
             >
               <Mail className="size-4" />
