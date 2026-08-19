@@ -143,6 +143,10 @@ export default function App() {
   // model catalog — artists pick a model like a filter, zero API knowledge
   type CatalogModel = { id: string; label: string; provider: string; model: string; tier: string; available: boolean };
   const [catalog, setCatalog] = useState<CatalogModel[]>([]);
+  // Which engine actually served the last generation (from the X-Gen-Source
+  // response header) — so "Rollout Fast" can show whether Cloudflare answered or
+  // it silently fell back to the slower built-in generator.
+  const [genSource, setGenSource] = useState<string>("");
   const [pick, setPick] = useState<string>(() => {
     try { return localStorage.getItem("rollout_model") || "builtin"; } catch { return "builtin"; }
   });
@@ -385,6 +389,7 @@ export default function App() {
     let dead = false;
     byoBlobs.current = {};
     if (!source) {
+      setGenSource("builtin");
       setUrls(builtinUrls);
       return;
     }
@@ -403,6 +408,8 @@ export default function App() {
               body: JSON.stringify({ ...source, prompt, seed, size: 1024 }),
             });
             if (!res.ok) throw new Error(await res.text());
+            const gs = res.headers.get("X-Gen-Source");
+            if (gs) setGenSource(gs);
             const blob = await res.blob();
             byoBlobs.current[i] = blob;
             out[i] = URL.createObjectURL(blob);
@@ -690,6 +697,25 @@ export default function App() {
                   {!m.available && <span className="ml-1.5 font-mono text-[9px] uppercase tracking-wider text-[#F0A45B]">soon</span>}
                 </button>
               ))}
+              {genSource && (() => {
+                const via: Record<string, { label: string; fast: boolean }> = {
+                  cloudflare: { label: "Cloudflare", fast: true },
+                  together: { label: "Together", fast: true },
+                  huggingface: { label: "Hugging Face", fast: true },
+                  fal: { label: "fal.ai", fast: true },
+                  platform: { label: "fal.ai", fast: true },
+                  builtin: { label: "Rollout Free", fast: false },
+                };
+                const v = via[genSource] ?? { label: genSource, fast: false };
+                return (
+                  <span
+                    className={"ml-1 font-mono text-[10px] " + (v.fast ? "text-[#46E0A8]" : "text-[#9A96AD]")}
+                    title={v.fast ? "Fast generator served this" : "Fell back to the free built-in generator (fast source was busy)"}
+                  >
+                    ● served via {v.label}{v.fast ? " ⚡" : ""}
+                  </span>
+                );
+              })()}
             </div>
           )}
 

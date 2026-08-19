@@ -25,6 +25,9 @@ app.add_middleware(
     allow_origins=_ALLOWED_ORIGINS or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
+    # Let the browser read which generator actually served an image, so the UI
+    # can show "via Cloudflare" vs a slow built-in fallback.
+    expose_headers=["X-Gen-Source"],
 )
 
 
