@@ -17,6 +17,8 @@ export type Release = {
   lyrics?: string;
   genre?: string;
   lyricVideoDone?: boolean; // a lyric video was rendered + kept for this release
+  promoDone?: boolean;      // the artist marked the promo clip done
+  planDone?: boolean;       // the artist marked the release plan done
   pagePublished?: boolean;  // the fan release page has been published
   id?: string; // cloud row id (rollout_releases)
 } | null;
@@ -376,6 +378,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             genre: row.genre || "", lyrics: row.lyrics || "",
             coverUrl: row.cover_url || "", file_id: row.file_id || "",
             lyricVideoDone: Boolean(row.lyric_video_done),
+            promoDone: Boolean(row.promo_done),
+            planDone: Boolean(row.plan_done),
             pagePublished: Boolean(row.page_published),
           });
           if (row.release_date) setReleaseDateState(String(row.release_date));
@@ -405,6 +409,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         genre: release.genre || "", lyrics: release.lyrics || "",
         cover_url: release.coverUrl || "",
         lyric_video_done: release.lyricVideoDone || false,
+        promo_done: release.promoDone || false,
+        plan_done: release.planDone || false,
         page_published: release.pagePublished || false,
         release_date: releaseDate || null,
         streaming_link: streamingLink || "",

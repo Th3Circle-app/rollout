@@ -42,11 +42,13 @@ export default function App() {
   } catch { /* ignore */ }
 
   const lyricVideoDone = Boolean((r as { lyricVideoDone?: boolean }).lyricVideoDone);
+  const promoDone = Boolean((r as { promoDone?: boolean }).promoDone);
+  const planDone = Boolean((r as { planDone?: boolean }).planDone);
   const pagePublished = Boolean((r as { pagePublished?: boolean }).pagePublished);
   const pageReady = pagePublished || Boolean(streamingLink);
   // Cover Art is parked as "Coming soon" (AI generator held for hardening), so it
   // no longer counts toward release progress — otherwise 100% would be unreachable.
-  const flags = [lyricVideoDone, Boolean(releaseDate), submitted, pageReady];
+  const flags = [lyricVideoDone, promoDone, planDone, submitted, pageReady];
   const pct = Math.round((flags.filter(Boolean).length / flags.length) * 100);
   const daysToGo = releaseDate
     ? Math.max(0, Math.ceil((new Date(releaseDate).getTime() - Date.now()) / 86400000))
@@ -55,8 +57,8 @@ export default function App() {
   const ASSETS: { label: string; sub: string; page: string; ready: boolean; soon?: boolean; status: string; img?: string; grad: string; icon: typeof ImageIcon }[] = [
     { label: "Cover Art", sub: "AI studio in the works", page: "Cover", ready: false, soon: true, status: "Coming soon", grad: "linear-gradient(135deg,#7c3aed,#4f46e5)", icon: ImageIcon },
     { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, status: lyricVideoDone ? "Ready" : "Create", grad: "linear-gradient(135deg,#4f46e5,#0ea5e9)", icon: Clapperboard },
-    { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: false, status: "Create", grad: "linear-gradient(135deg,#db2777,#7c3aed)", icon: Film },
-    { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), status: releaseDate ? "Ready" : "Set date", grad: "linear-gradient(135deg,#059669,#0d9488)", icon: Calendar },
+    { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: promoDone, status: promoDone ? "Ready" : "Create", grad: "linear-gradient(135deg,#db2777,#7c3aed)", icon: Film },
+    { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: planDone, status: planDone ? "Ready" : "Set date", grad: "linear-gradient(135deg,#059669,#0d9488)", icon: Calendar },
     { label: "Distribution", sub: "to every platform", page: "Distribute", ready: submitted, status: submitted ? "Sent" : "Send", grad: "linear-gradient(135deg,#2563eb,#06b6d4)", icon: Share2 },
     { label: "Release Page", sub: "the fan smart-link", page: "Landing", ready: pageReady, status: pageReady ? "Live" : "Build", grad: "linear-gradient(135deg,#f59e0b,#ef4444)", icon: Globe },
   ];

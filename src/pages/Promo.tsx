@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Clapperboard, Download, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DoneToggle from "@/components/DoneToggle";
 import { useStore } from "@/store";
 import ProGate from "@/components/ProGate";
 import FontSelect from "@/components/FontSelect";
@@ -12,7 +13,7 @@ import { API_BASE as API } from "@/lib/api";
 // a punchy headline sequence. Reuses the same $0 render engine as the lyric
 // video; no lyrics required. Built on the Opus-Clip-style "clip the hook" idea.
 export default function Promo() {
-  const { release, session, go } = useStore();
+  const { release, session, go, setRelease } = useStore();
   const r = release ?? {
     filename: "Afterglow Nova.wav", title: "Afterglow", artist: "Nova",
     key: "A minor", bpm: 120, duration: "3:24", moods: ["emotional", "driving"], keywords: [], coverUrl: "",
@@ -108,6 +109,13 @@ export default function Promo() {
           <p className="text-[#9A96AD] text-[17px] leading-7">
             A shareable vertical teaser cut from your hook. Post it to TikTok, Reels, and Shorts.
           </p>
+          <div className="pt-2">
+            <DoneToggle
+              done={Boolean(release?.promoDone)}
+              onToggle={(v) => release && setRelease({ ...release, promoDone: v })}
+              label="Mark promo done"
+            />
+          </div>
         </div>
 
         <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-1 gap-8 flex-wrap xl:flex-nowrap">
@@ -240,7 +248,10 @@ export default function Promo() {
             </div>
             {status === "done" && (
               <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button onClick={() => go("Dashboard")} className="btn-primary rounded-xl text-white gap-2">
+                <Button
+                  onClick={() => { if (release && !release.promoDone) setRelease({ ...release, promoDone: true }); go("Dashboard"); }}
+                  className="btn-primary rounded-xl text-white gap-2"
+                >
                   <Check className="size-4" /> Done — back to release
                 </Button>
                 <Button variant="ghost" onClick={download} className="gap-2 text-[#9A96AD] hover:text-[#F2F0F7]">

@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DoneToggle from "@/components/DoneToggle";
 import { useStore } from "@/store";
 
 import { API_BASE as API } from "@/lib/api";
@@ -76,7 +77,7 @@ function fmtDay(base: Date | null, offset: number) {
 
 export default function App() {
   const {
-    release, plan, openUpgrade,
+    release, plan, openUpgrade, setRelease,
     releaseDate: date, setReleaseDate: setDate,
     streamingLink: link, setStreamingLink: setLink,
   } = useStore();
@@ -251,6 +252,13 @@ export default function App() {
               Tell Rollout about <span className="text-[#F2F0F7]">{r.title}</span> and it writes your whole
               posting calendar — captions, timing, and hooks, all specific to your song.
             </p>
+            <div className="pt-1">
+              <DoneToggle
+                done={Boolean(release?.planDone)}
+                onToggle={(v) => release && setRelease({ ...release, planDone: v })}
+                label="Mark plan done"
+              />
+            </div>
           </div>
 
           {/* song description — drives the whole plan */}

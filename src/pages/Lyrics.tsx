@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import DoneToggle from "@/components/DoneToggle";
 import { Textarea } from "@/components/ui/textarea";
 import ProGate from "@/components/ProGate";
 import { useStore } from "@/store";
@@ -220,6 +221,13 @@ export default function App() {
                 <p className="text-[#9A96AD] text-[15px] leading-relaxed">
                   Auto-detect the words straight from your vocal, fix anything it misheard, and render a karaoke-style clip with exact timing.
                 </p>
+                <div className="pt-1">
+                  <DoneToggle
+                    done={Boolean(release?.lyricVideoDone)}
+                    onToggle={(v) => release && setRelease({ ...release, lyricVideoDone: v })}
+                    label="Mark lyric video done"
+                  />
+                </div>
               </div>
 
               {!fileId && (
