@@ -227,29 +227,40 @@ def genimage(req: GenImageReq):
     """Provider gateway: built-in free generator, the artist's own account,
     or the platform catalog (our key, our credits). BYO keys pass through
     per-request; nothing is stored."""
-    from genimage import generate, platform_source
-    prov, key, model, base_url = req.provider, req.key, req.model, req.base_url
+    from genimage import generate, platform_sources
     # BYO custom provider posts to a user-supplied base_url — SSRF-guard it.
     if req.provider == "custom" and req.base_url:
         try:
             _assert_public_url(req.base_url)
         except Exception as e:
             return Response(status_code=400, content=(f"bad base_url: {e}")[:200].encode(), media_type="text/plain")
+
     if req.provider == "platform":
-        src = platform_source()
-        if not src:
-            return Response(status_code=402,
-                            content=b"platform credits not live yet",
-                            media_type="text/plain")
-        prov = src["provider"]
-        key = src["key"]
-        # Only a funded fal account honors the client's premium model pick; the
-        # free sources always serve their single free fast model.
-        model = req.model if src["provider"] == "platform" else src["model"]
-        base_url = src.get("base_url", "") or req.base_url
+        # Failover chain: try each configured free/paid source in order, roll to
+        # the next on any failure (rate-limit, out of credits, provider down), and
+        # always end on the keyless built-in so a generation never hard-fails.
+        chain = platform_sources() + [
+            {"provider": "builtin", "key": "", "model": "", "base_url": ""}]
+        last_err = "no generator available"
+        for src in chain:
+            prov = src["provider"]
+            # Only a funded fal account honors the client's premium model pick; the
+            # free sources each serve their single free fast model.
+            model = req.model if prov == "platform" else src["model"]
+            base_url = src.get("base_url", "") or req.base_url
+            try:
+                data = generate(prov, req.prompt, src["key"], req.seed,
+                                req.size, model, base_url, req.image_b64)
+                return Response(content=data, media_type="image/png",
+                                headers={"X-Gen-Source": src.get("name", prov)})
+            except Exception as e:
+                last_err = str(e)
+                continue
+        return Response(status_code=422, content=last_err.encode(), media_type="text/plain")
+
     try:
-        data = generate(prov, req.prompt, key, req.seed,
-                        req.size, model, base_url, req.image_b64)
+        data = generate(req.provider, req.prompt, req.key, req.seed,
+                        req.size, req.model, req.base_url, req.image_b64)
         return Response(content=data, media_type="image/png")
     except Exception as e:
         return Response(status_code=422, content=str(e).encode(),

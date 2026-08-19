@@ -153,7 +153,17 @@ export default function App() {
   useEffect(() => {
     fetch(`${API}/imagemodels`)
       .then((r) => r.json())
-      .then((j) => setCatalog(Array.isArray(j.models) ? j.models : []))
+      .then((j) => {
+        const models: CatalogModel[] = Array.isArray(j.models) ? j.models : [];
+        setCatalog(models);
+        // New artists default to the fast generator the moment it's live — no
+        // model knowledge needed. A soft default: only when they haven't picked.
+        let stored: string | null = null;
+        try { stored = localStorage.getItem("rollout_model"); } catch { /* ignore */ }
+        if (!stored && models.some((m) => m.id === "flux-schnell" && m.available)) {
+          setPick("flux-schnell");
+        }
+      })
       .catch(() => setCatalog([]));
   }, []);
   const [subjectBusy, setSubjectBusy] = useState(false);

@@ -309,25 +309,40 @@ PLATFORM_MODELS = [
 ]
 
 
-def platform_source():
-    """Which generator the platform (no-user-key) path uses, by env priority:
-    a funded fal.ai account (premium catalog) > a free Together FLUX Schnell key
-    > free Cloudflare Workers AI > nothing. This lets us run a FREE fast generator
-    now (Together's FLUX.1-schnell-Free is a $0 model) and flip to fal the day we
-    have revenue — just set FAL_KEY, no code change."""
+def platform_sources():
+    """The platform (no-user-key) failover chain, best first. We stack every free
+    tier we're issued so that when one runs out of daily quota / rate-limits, the
+    next one serves — no customer ever waits on a single exhausted provider. Set a
+    funded FAL_KEY and it jumps to the front as the premium default. The keyless
+    built-in (pollinations) is appended by the caller as the always-free backstop.
+
+    Order (all optional; configured via env):
+      fal (premium, if funded) > Together FLUX.1-schnell-Free ($0 model) >
+      Cloudflare Workers AI (10k free/day) > Hugging Face (free tier)
+    """
+    out = []
     fal = os.environ.get("FAL_KEY", "")
     if fal:
-        return {"provider": "platform", "key": fal, "model": "", "base_url": "", "tier": "premium"}
+        out.append({"provider": "platform", "key": fal, "model": "", "base_url": "", "tier": "premium", "name": "fal"})
     tog = os.environ.get("TOGETHER_API_KEY", "") or os.environ.get("TOGETHER_KEY", "")
     if tog:
-        return {"provider": "together", "key": tog,
-                "model": "black-forest-labs/FLUX.1-schnell-Free", "base_url": "", "tier": "free"}
+        out.append({"provider": "together", "key": tog,
+                    "model": "black-forest-labs/FLUX.1-schnell-Free", "base_url": "", "tier": "free", "name": "together"})
     cf_key = os.environ.get("CF_API_TOKEN", "")
     cf_acct = os.environ.get("CF_ACCOUNT_ID", "")
     if cf_key and cf_acct:
-        return {"provider": "cloudflare", "key": cf_key,
-                "model": "@cf/black-forest-labs/flux-1-schnell", "base_url": cf_acct, "tier": "free"}
-    return None
+        out.append({"provider": "cloudflare", "key": cf_key,
+                    "model": "@cf/black-forest-labs/flux-1-schnell", "base_url": cf_acct, "tier": "free", "name": "cloudflare"})
+    hf = os.environ.get("HF_API_KEY", "") or os.environ.get("HUGGINGFACE_API_KEY", "")
+    if hf:
+        out.append({"provider": "huggingface", "key": hf,
+                    "model": "black-forest-labs/FLUX.1-schnell", "base_url": "", "tier": "free", "name": "huggingface"})
+    return out
+
+
+def platform_source():
+    s = platform_sources()
+    return s[0] if s else None
 
 
 def platform_key():
@@ -336,19 +351,18 @@ def platform_key():
 
 
 def list_models():
-    s = platform_source()
-    fal_live = bool(s and s["provider"] == "platform")   # premium fal-only catalog
-    fast_live = bool(s)                                  # any source powers "fast"
+    srcs = platform_sources()
+    fal_live = any(s["provider"] == "platform" for s in srcs)  # premium fal-only catalog
+    fast_live = bool(srcs)                                     # any configured fast source
     out = []
     for m in PLATFORM_MODELS:
         if m["id"] == "builtin":
             out.append({**m, "available": True})
         elif m["id"] == "flux-schnell":
-            # The everyday fast pick — served by whatever platform source is live
-            # (free Together/Cloudflare now, fal once funded).
+            # The everyday fast pick — served by whatever source in the chain is up.
             out.append({**m, "label": "Rollout Fast", "available": fast_live})
         else:
-            out.append({**m, "available": fal_live})     # Pro / Seedream / Recraft = fal only
+            out.append({**m, "available": fal_live})           # Pro / Seedream / Recraft = fal only
     return out
 
 
