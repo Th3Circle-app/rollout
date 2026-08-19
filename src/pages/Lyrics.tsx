@@ -55,6 +55,8 @@ export default function App() {
       .then((j) => setBrollUp(Boolean(j.broll))).catch(() => setBrollUp(false));
   }, []);
 
+  const [hookAudioUrl, setHookAudioUrl] = useState("");
+
   // The render is one long request (word alignment + ffmpeg), so drive a smooth
   // time-based bar with stages that snaps to 100% when the clip lands.
   const [rprog, setRprog] = useState(0);
@@ -74,8 +76,36 @@ export default function App() {
   }, [status]);
   useEffect(() => { if (status === "done") setRprog(100); }, [status]);
 
+  // Smooth time-based bar for the word-detection step (Demucs isolate + whisper).
+  const [dprog, setDprog] = useState(0);
+  useEffect(() => {
+    if (!detecting) { setDprog(0); return; }
+    setDprog(6);
+    let t = 0;
+    const iv = setInterval(() => {
+      t += 1;
+      setDprog((p) => (p < 92 ? p + Math.max(0.5, (92 - p) * 0.05) : 92));
+    }, 500);
+    return () => clearInterval(iv);
+  }, [detecting]);
+
   const fileId = (r as { file_id?: string }).file_id || "";
   const hasAudio = Boolean(fileId || audioFile);
+
+  // The hook-clip player: the engine is auth-gated, but a native <audio src> can't
+  // send the bearer token, so it 401s and never plays. Fetch it through the
+  // auth-wrapped fetch and hand the <audio> a blob URL instead.
+  useEffect(() => {
+    if (!fileId) { setHookAudioUrl(""); return; }
+    let dead = false;
+    let url = "";
+    fetch(`${API}/hookclip/${fileId}`)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("no clip"))))
+      .then((b) => { if (!dead) { url = URL.createObjectURL(b); setHookAudioUrl(url); } })
+      .catch(() => { if (!dead) setHookAudioUrl(""); });
+    return () => { dead = true; if (url) URL.revokeObjectURL(url); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, hookStart]);
 
   // Persistent library of rendered lyric videos for this song (survives leaving
   // the page). Each can be deleted individually.
@@ -259,8 +289,19 @@ export default function App() {
                       : (<><AudioLines className="size-3.5" />Detect from vocals</>)}
                   </Button>
                 </div>
-                {fileId && hookStart !== null && (
-                  <audio controls src={`${API}/hookclip/${fileId}`} className="w-full h-9" />
+                {detecting && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1E1E28]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-[width] duration-500 ease-out"
+                        style={{ width: `${Math.round(dprog)}%` }}
+                      />
+                    </div>
+                    <span className="font-mono text-[10px] text-[#5E5A72]">Isolating the vocal and listening for the words…</span>
+                  </div>
+                )}
+                {hookAudioUrl && (
+                  <audio controls src={hookAudioUrl} className="w-full h-9" />
                 )}
                 {detectErr && <span className="text-sm text-[#F0A45B]">{detectErr}</span>}
 

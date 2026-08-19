@@ -11,6 +11,7 @@ Falls back gracefully: align fail -> transcribed timing with true words
 swapped in; total fail -> caller keeps its beat-grid fallback.
 """
 import difflib
+import json
 import os
 import re
 import shutil
@@ -73,6 +74,48 @@ def _norm_text(s):
     return re.sub(r"[^a-z ]", "", s.lower())
 
 
+def _cf_words(vocals_path):
+    """Fast path: transcribe the isolated hook vocal on Cloudflare Whisper
+    large-v3-turbo, which returns per-word timestamps in ~7s (vs ~40s for the
+    local model + a cold model load). Raises on any failure so the caller falls
+    back to the local path. Timing is clip-relative, same as the local path."""
+    import base64
+    import math
+    import tempfile
+    import urllib.request
+    tok = os.environ.get("CF_API_TOKEN", "")
+    acct = os.environ.get("CF_ACCOUNT_ID", "")
+    if not tok or not acct:
+        raise RuntimeError("cloudflare not configured")
+    mp3 = tempfile.mktemp(suffix=".mp3")
+    try:
+        subprocess.run(["ffmpeg", "-y", "-i", vocals_path, "-b:a", "96k", mp3],
+                       capture_output=True, timeout=60)
+        audio = open(mp3, "rb").read()
+    finally:
+        try:
+            os.remove(mp3)
+        except OSError:
+            pass
+    url = f"https://api.cloudflare.com/client/v4/accounts/{acct}/ai/run/@cf/openai/whisper-large-v3-turbo"
+    req = urllib.request.Request(
+        url, data=json.dumps({"audio": base64.b64encode(audio).decode()}).encode(),
+        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
+                 "User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        j = (json.loads(r.read()) or {}).get("result") or {}
+    out = []
+    for seg in j.get("segments") or []:
+        conf = round(min(1.0, max(0.0, math.exp(seg.get("avg_logprob", -0.5)))), 2)
+        for w in seg.get("words") or []:
+            word = (w.get("word") or "").strip().strip(",.!?").strip()
+            s, e = w.get("start"), w.get("end")
+            if word and s is not None and e is not None and float(e) > float(s):
+                out.append({"word": word, "start": round(float(s), 3),
+                            "end": round(float(e), 3), "conf": conf})
+    return out
+
+
 def detect_words(hook_wav):
     """Transcribe the isolated vocal -> [{word,start,end,conf}] with timing
     snapped to actual voiced audio. This is the auto-lyrics path the user
@@ -83,6 +126,13 @@ def detect_words(hook_wav):
     except Exception:
         vocals = hook_wav  # transcribe the mix if separation dies
     try:
+        # Fast path: Cloudflare Whisper (word timestamps) — ~7s vs ~40s local.
+        try:
+            cf = _cf_words(vocals)
+            if cf and not _is_hallucination(cf):
+                return cf
+        except Exception:
+            pass  # any failure -> fall through to the local model
         model = _model()
         res = model.transcribe(vocals, **TRANSCRIBE_OPTS)
         # snap word edges to silence for exact trigger timing
