@@ -16,6 +16,11 @@ const Headphones3D = lazy(() => import("@/components/Headphones3D"));
 
 type Mode = "signin" | "signup" | "magic";
 
+// Flip to true once the Google provider is enabled in Supabase (Auth →
+// Providers → Google) with a Google Cloud OAuth client. Until then we hide the
+// button so a customer never lands on a dead OAuth screen.
+const GOOGLE_ENABLED = true;
+
 export default function Auth({ onBack }: { onBack?: () => void }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -85,7 +90,7 @@ export default function Auth({ onBack }: { onBack?: () => void }) {
           <Headphones3D />
         </Suspense>
       </ErrorBoundary>
-      <div className="rise glass relative z-10 w-full max-w-md rounded-3xl p-8">
+      <div className="rise glass auth-card relative z-10 w-full max-w-md rounded-3xl p-8">
         <div className="mb-7 flex flex-col items-center gap-3 text-center">
           <div className="size-10 rounded-xl bg-violet-500 flex items-center justify-center">
             <Zap className="size-5 text-[#0B0B0F]" fill="#0B0B0F" />
@@ -105,7 +110,7 @@ export default function Auth({ onBack }: { onBack?: () => void }) {
           {[
             { name: "Free", price: "$0", note: "first song" },
             { name: "Artist", price: "$15", note: "per month" },
-            { name: "Studio", price: "$20", note: "per month" },
+            { name: "Studio", price: "$29", note: "per month" },
           ].map((t) => (
             <div key={t.name} className="edge rounded-xl border border-white/8 bg-[#0B0B0F] px-3 py-2.5 text-center">
               <div className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">{t.name}</div>
@@ -164,22 +169,26 @@ export default function Auth({ onBack }: { onBack?: () => void }) {
             </p>
           )}
 
-          <div className="my-1 flex items-center gap-3">
-            <div className="h-px flex-1 bg-white/8" />
-            <span className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">or</span>
-            <div className="h-px flex-1 bg-white/8" />
-          </div>
+          {GOOGLE_ENABLED && (
+            <>
+              <div className="my-1 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/8" />
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">or</span>
+                <div className="h-px flex-1 bg-white/8" />
+              </div>
 
-          <Button variant="ghost" onClick={google}
-            className="rounded-xl border border-white/10 py-6 text-[#F2F0F7] gap-2 hover:border-white/20">
-            <svg className="size-4" viewBox="0 0 24 24" aria-hidden>
-              <path fill="#EA4335" d="M12 5.04c1.94 0 3.28.84 4.04 1.54l2.95-2.88C17.2 2.02 14.83 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.44 2.67C6.47 7.17 9 5.04 12 5.04z"/>
-              <path fill="#4285F4" d="M23.49 12.27c0-.9-.08-1.57-.26-2.27H12v4.3h6.47c-.13 1.08-.83 2.71-2.4 3.81l3.35 2.6c2.01-1.86 3.07-4.6 3.07-8.44z"/>
-              <path fill="#FBBC05" d="M5.62 14.26A6.9 6.9 0 0 1 5.24 12c0-.79.14-1.55.37-2.26L2.18 7.07A11.02 11.02 0 0 0 1 12c0 1.77.43 3.45 1.18 4.93l3.44-2.67z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.35-2.6c-.92.62-2.15 1.06-3.93 1.06-3 0-5.53-2.13-6.38-4.87l-3.44 2.67C3.99 20.53 7.7 23 12 23z"/>
-            </svg>
-            Continue with Google
-          </Button>
+              <Button variant="ghost" onClick={google}
+                className="rounded-xl border border-white/10 py-6 text-[#F2F0F7] gap-2 hover:border-white/20">
+                <svg className="size-4" viewBox="0 0 24 24" aria-hidden>
+                  <path fill="#EA4335" d="M12 5.04c1.94 0 3.28.84 4.04 1.54l2.95-2.88C17.2 2.02 14.83 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.44 2.67C6.47 7.17 9 5.04 12 5.04z"/>
+                  <path fill="#4285F4" d="M23.49 12.27c0-.9-.08-1.57-.26-2.27H12v4.3h6.47c-.13 1.08-.83 2.71-2.4 3.81l3.35 2.6c2.01-1.86 3.07-4.6 3.07-8.44z"/>
+                  <path fill="#FBBC05" d="M5.62 14.26A6.9 6.9 0 0 1 5.24 12c0-.79.14-1.55.37-2.26L2.18 7.07A11.02 11.02 0 0 0 1 12c0 1.77.43 3.45 1.18 4.93l3.44-2.67z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.35-2.6c-.92.62-2.15 1.06-3.93 1.06-3 0-5.53-2.13-6.38-4.87l-3.44 2.67C3.99 20.53 7.7 23 12 23z"/>
+                </svg>
+                Continue with Google
+              </Button>
+            </>
+          )}
 
           {mode !== "magic" ? (
             <button onClick={() => { setMode("magic"); setMsg(null); }}

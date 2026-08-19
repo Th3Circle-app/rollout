@@ -1,10 +1,15 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Zap } from "lucide-react";
+import { ArrowRight, Check, Plus, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GlassBackground from "@/components/GlassBackground";
 import SmokeLayer from "@/components/SmokeLayer";
 import StarField from "@/components/StarField";
 import ErrorBoundary from "@/components/ErrorBoundary";
+
+// Sponsors shown on the landing. Add an entry to feature a brand:
+//   { name: "Acme", logo: "/sponsors/acme.svg", url: "https://acme.com" }
+// Empty slots + a "Become a sponsor" tile render automatically.
+const SPONSORS: { name: string; logo?: string; url?: string }[] = [];
 
 // three.js is heavy; code-split it so the landing's copy + layout paint
 // instantly and the 3D hero streams in right after.
@@ -202,7 +207,7 @@ const TIERS: { name: string; price: string; per: string; blurb: string; feats: s
   },
   {
     name: "Studio",
-    price: "$20",
+    price: "$29",
     per: "per month",
     blurb: "Market like a machine. The full campaign engine.",
     feats: ["Everything in Artist", "Ad campaign builder", "Advanced art direction", "Everything, unlocked"],
@@ -299,6 +304,9 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
               See how it works
             </button>
           </div>
+          <button onClick={onStart} className="mt-4 rise-3 font-mono text-[12px] text-[#9A96AD] transition-colors hover:text-violet-300">
+            or unlock everything — <span className="font-semibold text-violet-300">7 days for $7</span>, then $15/mo
+          </button>
         </div>
         <button
           onClick={scrollToFeatures}
@@ -398,6 +406,72 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* sponsors */}
+      <section className="relative border-t border-white/8 bg-[#0B0B0F]/45 py-24">
+        <div className="mx-auto max-w-5xl px-6">
+          <Reveal>
+            <div className="mb-10 text-center">
+              <span className="font-mono text-[11px] uppercase tracking-[3px] text-violet-400">Sponsors</span>
+              <h2 className="mt-3 text-balance text-2xl font-semibold tracking-tight text-[#F2F0F7] sm:text-3xl">
+                Backed by brands who believe in independent artists.
+              </h2>
+            </div>
+          </Reveal>
+          <Reveal delay={80}>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {SPONSORS.length > 0 &&
+                SPONSORS.map((s) => (
+                  <a
+                    key={s.name}
+                    href={s.url || "#"}
+                    target={s.url ? "_blank" : undefined}
+                    rel="noreferrer"
+                    className="flex h-24 items-center justify-center rounded-2xl border border-white/8 bg-white/[0.02] px-6 transition-colors hover:border-white/20"
+                  >
+                    {s.logo ? (
+                      <img src={s.logo} alt={s.name} className="max-h-10 max-w-full object-contain opacity-80" />
+                    ) : (
+                      <span className="text-sm font-semibold text-[#CFCADB]">{s.name}</span>
+                    )}
+                  </a>
+                ))}
+
+              {/* open slots so the wall never looks empty */}
+              {Array.from({ length: Math.max(0, 3 - SPONSORS.length) }).map((_, i) => (
+                <div
+                  key={`ghost-${i}`}
+                  className="flex h-24 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.01]"
+                >
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-[#5E5A72]">Your brand here</span>
+                </div>
+              ))}
+
+              {/* become a sponsor — the "+" that lets more brands join */}
+              <a
+                href="mailto:harrison@xkaii.com?subject=Sponsor%20Rollout&body=Hi%2C%20I%27d%20like%20to%20sponsor%20Rollout."
+                onClick={(e) => {
+                  // mailto can silently no-op when no mail client is set as the
+                  // default handler — open a Gmail compose as a guaranteed
+                  // in-browser fallback so the click always does something.
+                  const gmail =
+                    "https://mail.google.com/mail/?view=cm&fs=1&to=harrison@xkaii.com" +
+                    "&su=" + encodeURIComponent("Sponsor Rollout") +
+                    "&body=" + encodeURIComponent("Hi, I'd like to sponsor Rollout.");
+                  window.open(gmail, "_blank", "noopener");
+                  e.preventDefault();
+                }}
+                className="group relative z-10 flex h-24 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-violet-500/5 transition-colors hover:border-violet-400/50 hover:bg-violet-500/10"
+              >
+                <span className="flex size-9 items-center justify-center rounded-full bg-violet-500/15 text-violet-300 transition-colors group-hover:bg-violet-500/25">
+                  <Plus className="size-5" />
+                </span>
+                <span className="text-xs font-medium text-[#CFCADB] group-hover:text-white">Become a sponsor</span>
+              </a>
+            </div>
+          </Reveal>
         </div>
       </section>
 

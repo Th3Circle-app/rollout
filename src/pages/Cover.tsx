@@ -8,24 +8,36 @@ import {
   Loader2,
   Lock,
   RefreshCw,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, getSeeds, rotateSeeds } from "@/store";
 import { loadImgConn } from "@/pages/Settings";
 import { renderStack, DEFAULT_LAYERS, type Layers as LayerStack, type BlendMode } from "@/compositor";
 import { API_BASE as API } from "@/lib/api";
+import FontSelect from "@/components/FontSelect";
+import { ensureFontsLoaded } from "@/lib/fonts";
 
 // $0, keyless image generation. Built-in AI must never cost us money.
 const IMG = (prompt: string, seed: number) =>
   `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}` +
   `?width=1024&height=1024&seed=${seed}&nologo=true&model=flux`;
 
+// Flux/pollinations defaults to a woman's portrait for any open-ended prompt.
+// Unless the artist actually asks for a person, steer hard toward abstract,
+// atmospheric cover art so it stops generating random people.
+const PERSON_RE = /\b(portrait|person|people|woman|women|girl|girls|man|men|boy|guy|face|singer|rapper|model|self|selfie|figure|body|human|character|posing)\b/i;
+
 const fullPrompt = (direction: string, keywords: string[], moods: string[]) => {
   const kws = keywords.length ? keywords.join(", ") : "abstract texture";
   const md = moods.length ? moods.join(", ") : "cinematic";
   const dir = direction.trim();
+  const wantsPerson = PERSON_RE.test(`${dir} ${kws}`);
+  const steer = wantsPerson
+    ? "" // the artist asked for a subject — let the model render it
+    : ", abstract atmospheric album artwork, focus on environment, texture, light and color, no people, no person, no face, no portrait";
   return (
-    `album cover art, ${dir ? dir + ", " : ""}${kws}, ${md} mood, ` +
+    `album cover art, ${dir ? dir + ", " : ""}${kws}, ${md} mood${steer}, ` +
     `no text, no lettering, no words, high detail, cinematic lighting, ` +
     `square composition, professional music artwork`
   );
@@ -34,8 +46,6 @@ const fullPrompt = (direction: string, keywords: string[], moods: string[]) => {
 
 
 const BLENDS: BlendMode[] = ["overlay", "multiply", "screen", "soft-light", "color"];
-const FONTS = ["Arial Black", "Georgia", "Courier New", "Helvetica Neue"];
-
 export default function App() {
   const { release, setRelease, go, plan, openUpgrade } = useStore();
 
@@ -56,6 +66,35 @@ export default function App() {
   const [selected, setSelected] = useState(0);
   const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const [failed, setFailed] = useState<Record<number, boolean>>({});
+  // Pollinations throttles bursts/browser-referrer requests, so a card can error
+  // even though the image is fine. Retry a few times (with a cache-bust) before
+  // giving up, so "Couldn't load" is a last resort, not a first hiccup.
+  const [retry, setRetry] = useState<Record<number, number>>({});
+  const MAX_RETRY = 4;
+  // Pollinations throttles a 4-at-once burst (serves one, drops the rest), so we
+  // arm the cards one at a time instead of firing all four requests together.
+  const [armed, setArmed] = useState<Record<number, boolean>>({ 0: true });
+
+  // User-uploaded custom fonts (from their own computer). Loaded into
+  // document.fonts so the canvas compositor renders them like a built-in face.
+  const [customFonts, setCustomFonts] = useState<string[]>([]);
+  const onFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buf = await file.arrayBuffer();
+      const fam = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "Custom Font";
+      const face = new FontFace(fam, buf);
+      await face.load();
+      document.fonts.add(face);
+      setCustomFonts((f) => (f.includes(fam) ? f : [...f, fam]));
+      patch("type", { font: fam }); // select it immediately
+    } catch {
+      /* unsupported / corrupt font file — silently ignore */
+    } finally {
+      e.target.value = "";
+    }
+  };
   const [downloading, setDownloading] = useState(false);
   const [layers, setLayers] = useState<LayerStack>(DEFAULT_LAYERS);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -280,7 +319,18 @@ export default function App() {
     const changed = (i: number) => urls[i] !== prev[i];
     setLoaded((l) => { const n = { ...l }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
     setFailed((f) => { const n = { ...f }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
+    setRetry((rr) => { const n = { ...rr }; urls.forEach((_, i) => { if (changed(i)) delete n[i]; }); return n; });
     prevUrls.current = urls;
+  }, [urls]);
+
+  // Stagger the four card loads so pollinations isn't hit with a simultaneous
+  // burst — card 0 immediately, then 1/2/3 ~1.8s apart. Re-staggers on a new set.
+  useEffect(() => {
+    setArmed({ 0: true });
+    const timers = [1, 2, 3].map((i) =>
+      setTimeout(() => setArmed((a) => ({ ...a, [i]: true })), i * 1800)
+    );
+    return () => timers.forEach(clearTimeout);
   }, [urls]);
   const byoBlobs = useRef<Record<number, Blob>>({});
   useEffect(() => {
@@ -301,6 +351,7 @@ export default function App() {
     }
     setLoaded({});
     setFailed({});
+    setRetry({});
     setUrls(["", "", "", ""]);
     (async () => {
       const out: string[] = [...builtinUrls];
@@ -338,6 +389,13 @@ export default function App() {
     img.src = urls[selected];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urls, selected]);
+
+  // Preload the whole font library so the canvas renders the chosen face, then
+  // repaint once they're ready (the default is a system font, so first paint is fine).
+  useEffect(() => {
+    ensureFontsLoaded().then(() => { try { draw(); } catch { /* not ready yet */ } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const draw = () => {
     if (canvasRef.current) {
@@ -410,6 +468,7 @@ export default function App() {
     }
     setLoaded({});
     setFailed({});
+    setRetry({});
     setSeeds(rotateSeeds());
   };
 
@@ -539,7 +598,7 @@ export default function App() {
           {/* art direction — album-cover design archetypes */}
           {styles.length > 0 && (
             <div className="flex px-12 pt-5 items-center gap-2 flex-wrap">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-[#5E5A72]">Style</span>
+              <span className="section-label">Style</span>
               {styles.map((s) => (
                 <button
                   key={s.id}
@@ -560,7 +619,7 @@ export default function App() {
           {/* model catalog — pick a generator like a filter */}
           {catalog.length > 0 && (
             <div className="flex px-12 pt-5 items-center gap-2 flex-wrap">
-              <span className="font-mono text-[11px] uppercase tracking-wider text-[#5E5A72]">Model</span>
+              <span className="section-label">Model</span>
               {catalog.map((m) => (
                 <button
                   key={m.id}
@@ -592,7 +651,7 @@ export default function App() {
                   key={i}
                   onClick={() => setSelected(i)}
                   className={
-                    "relative cursor-pointer rounded-2xl w-32 h-32 overflow-hidden border-2 border-solid transition-all " +
+                    "relative cursor-pointer rounded-xl w-32 h-32 overflow-hidden border-2 border-solid transition-all " +
                     (selected === i ? "border-violet-500" : "border-transparent hover:border-white/20")
                   }
                 >
@@ -608,15 +667,24 @@ export default function App() {
                       <ImageOff className="size-4 text-[#5E5A72]" />
                       <span className="text-[9px] leading-tight text-[#9A96AD]">Couldn't load. Tap New set.</span>
                     </div>
-                  ) : (
+                  ) : armed[i] ? (
                     <img
-                      src={urls[i]}
+                      src={urls[i] + (retry[i] ? `${urls[i].includes("?") ? "&" : "?"}_r=${retry[i]}` : "")}
                       alt={`Base ${i + 1}`}
                       className="object-cover w-full h-full"
+                      referrerPolicy="no-referrer"
                       onLoad={() => setLoaded((l) => ({ ...l, [i]: true }))}
-                      onError={() => setFailed((f) => ({ ...f, [i]: true }))}
+                      onError={() => {
+                        const n = (retry[i] ?? 0) + 1;
+                        if (n <= MAX_RETRY) {
+                          // exponential-ish backoff, then re-attempt with a fresh cache-bust
+                          setTimeout(() => setRetry((r) => ({ ...r, [i]: n })), 600 * n);
+                        } else {
+                          setFailed((f) => ({ ...f, [i]: true }));
+                        }
+                      }}
                     />
-                  )}
+                  ) : null}
                   <div className="rounded-sm bg-[#0B0B0F]/70 border-[#F0A45B]/40 border-1 border-solid absolute left-1.5 top-1.5 px-1.5 py-0.5">
                     <span className="font-mono text-[#F0A45B] text-[9px]">AI</span>
                   </div>
@@ -626,6 +694,13 @@ export default function App() {
                 {plan !== "free" ? <RefreshCw className="size-3.5" /> : <Lock className="size-3.5" />}
                 New set
               </Button>
+              <p className="text-[10px] leading-tight text-[#5E5A72]">
+                Using the free shared generator.{" "}
+                <button onClick={() => go("Settings")} className="text-violet-400 hover:underline">
+                  Add your own free key
+                </button>{" "}
+                for instant, unlimited covers.
+              </p>
             </div>
 
             {/* live composite preview */}
@@ -654,7 +729,7 @@ export default function App() {
             </div>
 
             {/* layers panel */}
-            <div className="shrink-0 panel rounded-2xl flex p-5 flex-col gap-3 w-80">
+            <div className="shrink-0 panel rounded-3xl flex p-5 flex-col gap-3 w-80">
               {/* start from a photo */}
               <div className="rounded-xl panel-inset p-3 flex flex-col gap-2.5">
                 <div className="flex items-center justify-between">
@@ -676,17 +751,17 @@ export default function App() {
                 {photoB64 && (
                   <div className="flex flex-col gap-1.5">
                     <button onClick={photoExact} disabled={!!photoBusy}
-                      className="rounded-lg border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
+                      className="rounded-xl border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
                       <span className="font-semibold text-[#F2F0F7]">{photoBusy === "exact" ? "Cutting you out…" : "Keep me exact"}</span>
                       <span className="block text-[10px]">you, untouched — cover designed around you</span>
                     </button>
                     <button onClick={photoRestyle} disabled={!!photoBusy}
-                      className="rounded-lg border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
+                      className="rounded-xl border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
                       <span className="font-semibold text-[#F2F0F7]">{photoBusy === "restyle" ? "Restyling…" : "Restyle me"}</span>
                       <span className="block text-[10px]">AI redraws the photo in this style, identity kept</span>
                     </button>
                     <button onClick={photoEssence} disabled={!!photoBusy}
-                      className="rounded-lg border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
+                      className="rounded-xl border border-white/10 px-2.5 py-1.5 text-left text-[11px] text-[#9A96AD] hover:border-violet-500/60 hover:text-[#F2F0F7] transition-colors disabled:opacity-40">
                       <span className="font-semibold text-[#F2F0F7]">{photoBusy === "essence" ? "Reading essence…" : "Inspired by"}</span>
                       <span className="block text-[10px]">all-new art that feels like your photo</span>
                     </button>
@@ -702,7 +777,30 @@ export default function App() {
               </div>
 
               <Row name="5 · Typography" k="type">
-                <Pills options={FONTS} value={layers.type.font} onPick={(v) => patch("type", { font: v })} />
+                <FontSelect value={layers.type.font} onChange={(id) => patch("type", { font: id })} />
+                {customFonts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {customFonts.map((cf) => (
+                      <button
+                        key={cf}
+                        onClick={() => patch("type", { font: cf })}
+                        style={{ fontFamily: cf }}
+                        className={"rounded-full border px-2.5 py-0.5 text-[11px] transition-colors " +
+                          (layers.type.font === cf ? "border-violet-500 bg-violet-500/15 text-[#F2F0F7]" : "border-white/10 text-[#9A96AD] hover:border-white/20")}
+                      >
+                        {cf}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-white/15 px-2.5 py-0.5 text-[10px] text-[#9A96AD] transition-colors hover:border-violet-500/60 hover:text-[#F2F0F7]">
+                  <Upload className="size-3" />
+                  Upload your font
+                  <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" onChange={onFontUpload} className="hidden" />
+                </label>
+                <span className="font-mono text-[10px] text-[#5e5a72]">
+                  Use your own .ttf / .otf / .woff — it stays in your browser and renders straight onto the cover.
+                </span>
                 <Pills options={["bottom", "center", "top"]} value={layers.type.layout}
                   onPick={(v) => patch("type", { layout: v as LayerStack["type"]["layout"] })} />
                 <div className="flex items-center gap-2">
@@ -737,12 +835,12 @@ export default function App() {
                     value={subjectPrompt}
                     onChange={(e) => setSubjectPrompt(e.target.value)}
                     placeholder="lone astronaut, rose, statue..."
-                    className="flex-1 rounded-lg panel-inset px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                    className="flex-1 rounded-xl panel-inset px-2.5 py-1.5 font-mono text-[11px] text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                   />
                   <button
                     onClick={() => makeSubject()}
                     disabled={subjectBusy || !subjectPrompt.trim()}
-                    className="rounded-lg bg-violet-500 px-2.5 text-[11px] font-semibold text-white disabled:opacity-40"
+                    className="rounded-xl bg-violet-500 px-2.5 text-[11px] font-semibold text-white disabled:opacity-40"
                   >
                     {subjectBusy ? "…" : "Cut"}
                   </button>
@@ -754,12 +852,17 @@ export default function App() {
                     className="flex-1 accent-violet-500 h-1" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-[#5e5a72] w-12 shrink-0">pos</span>
+                  <span className="font-mono text-[10px] text-[#5e5a72] w-12 shrink-0">left↔right</span>
                   <input type="range" min={0} max={100} value={Math.round(layers.subject.x * 100)}
                     onChange={(e) => patch("subject", { x: Number(e.target.value) / 100 })}
+                    aria-label="Horizontal position"
                     className="flex-1 accent-violet-500 h-1" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-[#5e5a72] w-12 shrink-0">up↕down</span>
                   <input type="range" min={0} max={100} value={Math.round(layers.subject.y * 100)}
                     onChange={(e) => patch("subject", { y: Number(e.target.value) / 100 })}
+                    aria-label="Vertical position"
                     className="flex-1 accent-violet-500 h-1" />
                 </div>
               </Row>
@@ -786,7 +889,7 @@ export default function App() {
                 <textarea
                   value={direction}
                   onChange={(e) => setDirection(e.target.value)}
-                  className="min-h-16 w-full resize-none rounded-lg panel-inset px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
+                  className="min-h-16 w-full resize-none rounded-xl panel-inset px-2.5 py-2 font-mono text-[11px] text-neutral-50 focus:outline-none focus:ring-1 focus:ring-violet-500/40"
                 />
               </Row>
             </div>

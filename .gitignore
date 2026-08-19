@@ -22,3 +22,6 @@ video/public/broll/
 # os noise
 .DS_Store
 video/package-lock.json
+
+# Local Netlify folder
+.netlify

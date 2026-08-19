@@ -2,7 +2,7 @@
 import os, io, re, shutil, socket, tempfile, ipaddress, urllib.request
 import time as _time
 from urllib.parse import urlparse
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -274,6 +274,43 @@ def revibe(req: ReVibeReq):
 
 class DetectReq(BaseModel):
     file_id: str
+    audio_key: str = ""   # "{uid}/{file_id}" in the durable Storage bucket
+
+
+# Strict key pattern (uid/filename) so a crafted audio_key can't traverse paths
+# or point the fetch anywhere but this artist's own Storage folder.
+_AUDIO_KEY_RE = re.compile(r"^[0-9a-fA-F-]{1,64}/[A-Za-z0-9._-]{1,128}$")
+
+
+def _ensure_audio(file_id: str, audio_key: str, authorization: str):
+    """Guarantee the track's audio exists locally. If the engine's copy is gone
+    (e.g. after a redeploy), re-fetch the DURABLE copy from Supabase Storage using
+    the caller's own access token. Fixed host + strict key pattern — never an
+    arbitrary-URL fetch, so no SSRF surface."""
+    base = os.path.basename(file_id or "")
+    if not base:
+        return
+    dest = os.path.join(UPLOADS, base)
+    if os.path.isfile(dest):
+        return
+    if not authorization or not audio_key or not _AUDIO_KEY_RE.match(audio_key):
+        return
+    sup = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    anon = os.environ.get("SUPABASE_ANON_KEY", "")
+    if not sup:
+        return
+    url = f"{sup}/storage/v1/object/tracks/{audio_key}"
+    try:
+        rq = urllib.request.Request(url, headers={"Authorization": authorization, "apikey": anon})
+        with urllib.request.urlopen(rq, timeout=45) as resp:
+            data = resp.read()
+        with open(dest, "wb") as out:
+            out.write(data)
+    except Exception:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
 
 
 def _hook_clip_path(file_id: str):
@@ -304,10 +341,11 @@ def _hook_clip_path(file_id: str):
 
 
 @app.post("/detectlyrics")
-def detectlyrics(req: DetectReq):
+def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
     """Auto-detect sung words in the hook with exact, silence-snapped timing.
     The editor lets the artist fix any misheard word before rendering."""
     from align import detect_words
+    _ensure_audio(req.file_id, req.audio_key, authorization)  # re-hydrate if the local copy is gone
     clip, hook_start = _hook_clip_path(req.file_id)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
@@ -423,6 +461,9 @@ class CaptionReq(BaseModel):
     date: str = ""
     link: str = ""
     lyrics: str = ""
+    about: str = ""       # the artist's own words about the song
+    variant: int = 0      # bumps on "Regenerate" for a fresh take
+    count: int = 7        # plan length (scaled by the caller's tier)
 
 
 @app.post("/captions")
@@ -430,6 +471,7 @@ def captions(req: CaptionReq):
     return generate_captions(
         title=req.title, artist=req.artist, moods=req.moods,
         keywords=req.keywords, date=req.date, link=req.link, lyrics=req.lyrics,
+        about=req.about, variant=req.variant, count=req.count,
     )
 
 
@@ -444,11 +486,15 @@ def lyric_video(
     bg: str = Form("cover"),
     moods: str = Form(""),
     style: str = Form(""),
+    audio_key: str = Form(""),
+    font: str = Form("bold"),
+    position: str = Form("center"),
     file: UploadFile | None = File(None),
+    authorization: str = Header(default=""),
 ):
     """Render a 15s kinetic lyric video from the hook of the track. Plain def so
     the long ffmpeg/Remotion render runs in the threadpool, not the event loop."""
-    from lyricvideo import make_lyric_video, make_lyric_video_premium
+    from lyricvideo import make_lyric_video, make_lyric_video_premium, make_lyric_video_broll
 
     audio_is_temp = False
     if file is not None and file.filename:
@@ -463,6 +509,7 @@ def lyric_video(
             audio_path = tmp.name
         audio_is_temp = True
     elif file_id:
+        _ensure_audio(file_id, audio_key, authorization)  # re-hydrate from durable Storage if gone
         audio_path = os.path.join(UPLOADS, os.path.basename(file_id))
         if not os.path.isfile(audio_path):
             return Response(status_code=404, content=b"unknown file_id")
@@ -486,14 +533,32 @@ def lyric_video(
 
     out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
     try:
-        # Premium engine first (aligned words + Remotion); beat-grid fallback.
-        try:
-            meta = make_lyric_video_premium(
-                audio_path, lyrics, cover_url, title, artist, out, words_override,
-                bg=bg, moods=[m for m in moods.split(",") if m], style=style)
-        except Exception as e:
-            print("premium engine fell back:", e)
-            meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out)
+        # The premium engine needs Remotion (Node), which is NOT bundled in this
+        # image — attempting it first burned minutes on demucs + whisper before
+        # failing every time. Go straight to the self-contained ffmpeg renderer,
+        # which is what actually produced the output all along. Only try premium
+        # if Remotion is genuinely present on PATH.
+        import shutil as _sh
+        _has_remotion = bool(_sh.which("npx"))
+        _moods = [m for m in moods.split(",") if m]
+        if _has_remotion:
+            try:
+                meta = make_lyric_video_premium(
+                    audio_path, lyrics, cover_url, title, artist, out, words_override,
+                    bg=bg, moods=_moods, style=style)
+            except Exception as e:
+                print("premium engine fell back:", e)
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
+        elif bg == "broll":
+            # Moving vibe-matched footage background via the ffmpeg renderer. Any
+            # failure (no clips, ffmpeg error) safely falls back to the cover render.
+            try:
+                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position)
+            except Exception as e:
+                print("b-roll fell back to cover:", e)
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
+        else:
+            meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
@@ -518,7 +583,15 @@ def lyric_video(
         },
     )
 
-UPLOADS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+# Uploaded audio must survive engine redeploys/restarts, otherwise a later step
+# (e.g. the lyric-video render) can't find the track's file_id. Store it on the
+# mounted persistent volume in prod (/root/.cache is the Fly volume), falling
+# back to a local ./uploads dir for dev where no volume exists.
+_CACHE_ROOT = "/root/.cache"
+if os.path.isdir(_CACHE_ROOT) and os.access(_CACHE_ROOT, os.W_OK):
+    UPLOADS = os.path.join(_CACHE_ROOT, "uploads")
+else:
+    UPLOADS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 os.makedirs(UPLOADS, exist_ok=True)
 
 

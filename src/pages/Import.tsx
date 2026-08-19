@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight, AudioLines, FileText, Upload, X, Loader2,
 } from "lucide-react";
@@ -23,6 +23,26 @@ export default function App() {
   const [err, setErr] = useState("");
   const [lyrics, setLyrics] = useState("");
 
+  // Analysis is one request with no streaming progress, so drive a smooth,
+  // time-based bar that eases toward ~92% and snaps to 100% when the result
+  // lands — with stage labels so it feels like real work, not a fake spinner.
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState("");
+  useEffect(() => {
+    if (status !== "analyzing") return;
+    const stages = ["Uploading your track", "Reading the vibe", "Finding the hook", "Mapping mood, key & BPM"];
+    setProgress(6);
+    setStage(stages[0]);
+    let t = 0;
+    const iv = setInterval(() => {
+      t += 1;
+      setProgress((p) => (p < 92 ? p + Math.max(0.5, (92 - p) * 0.05) : 92));
+      setStage(stages[Math.min(stages.length - 1, Math.floor(t / 9))]); // ~4.5s per stage
+    }, 500);
+    return () => clearInterval(iv);
+  }, [status]);
+  useEffect(() => { if (status === "done") setProgress(100); }, [status]);
+
   const overLimitMsg =
     FREE_SONG_LIMIT === 1
       ? "Your free song is used — unlock unlimited releases"
@@ -43,8 +63,24 @@ export default function App() {
       fd.append("file", f);
       const r = await fetch(`${API}/analyze`, { method: "POST", body: fd });
       if (!r.ok) throw new Error("Analysis failed");
-      setResult(await r.json());
+      const j = await r.json();
+      setResult(j);
       setStatus("done");
+      // Durable backup: also store the raw audio in Supabase Storage under the
+      // user's own folder, so a track is NEVER lost even if the engine's local
+      // copy disappears (redeploy, volume reset). The engine re-fetches from here.
+      if (supabase && j?.file_id) {
+        try {
+          const { data: sess } = await supabase.auth.getSession();
+          const uid = sess.session?.user?.id;
+          if (uid) {
+            await supabase.storage.from("tracks").upload(`${uid}/${j.file_id}`, f, {
+              upsert: true,
+              contentType: f.type || "audio/wav",
+            });
+          }
+        } catch { /* backup is best-effort; the session's engine copy still works */ }
+      }
       // Consume the slot ONLY after a successful analysis, so a transient
       // backend failure never permanently burns the user's free song. The
       // server RPC is authoritative (idempotent per filename); local mirrors it.
@@ -130,7 +166,7 @@ export default function App() {
                     <div className="flex flex-col gap-1">
                       <span className="font-bold text-[#F2F0F7] text-lg leading-7 tracking-tight">{name}</span>
                       <span className="font-mono text-[#5E5A72] text-xs leading-4 flex items-center gap-1.5">
-                        {status === "analyzing" && (<><Loader2 className="size-3 animate-spin" /> Analyzing vibe...</>)}
+                        {status === "analyzing" && (<><Loader2 className="size-3 animate-spin" /> {stage || "Analyzing vibe"}…</>)}
                         {status === "done" && "Analysis complete"}
                         {status === "error" && <span className="text-red-400">{err}</span>}
                       </span>
@@ -138,6 +174,22 @@ export default function App() {
                   </div>
                   <button aria-label="Clear file" onClick={() => { setStatus("idle"); setResult(null); }}><X className="size-4 text-[#5E5A72]" /></button>
                 </div>
+
+                {status === "analyzing" && (
+                  <div className="flex flex-col gap-2 -mt-2">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#1E1E28]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-[width] duration-500 ease-out"
+                        style={{ width: `${Math.round(progress)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between font-mono text-[10px] text-[#5E5A72]">
+                      <span>{stage || "Working"}…</span>
+                      <span>{Math.round(progress)}%</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-[#5E5A72]">First scan can take ~40s while the engine warms up.</span>
+                  </div>
+                )}
 
                 <div className={"flex px-1 items-end gap-[3px] h-16 " + (status === "analyzing" ? "animate-pulse" : "")}>
                   {[4,8,12,16,10,6,14,16,9,5,11,15,8,6,13,16,10,4,12,7,14,9,16,6].map((h, i) => (

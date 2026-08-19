@@ -1,6 +1,7 @@
 import Import from "./pages/Import";
 import Build from "./pages/Build";
 import Dashboard from "./pages/Dashboard";
+import Library from "./pages/Library";
 import Cover from "./pages/Cover";
 import Distribute from "./pages/Distribute";
 import Plan from "./pages/Plan";
@@ -8,6 +9,7 @@ import Lyrics from "./pages/Lyrics";
 import Landing from "./pages/Landing";
 import Ads from "./pages/Ads";
 import Ship from "./pages/Ship";
+import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
 import { useEffect, useState } from "react";
 import Auth from "./components/Auth";
@@ -15,6 +17,7 @@ import Sidebar from "./components/Sidebar";
 import UpgradeModal from "./components/UpgradeModal";
 import { TourProvider } from "./components/Tour";
 import { StoreProvider, useStore } from "./store";
+import { API_BASE } from "./lib/api";
 import FanPage from "./pages/FanPage";
 import GlassBackground from "./components/GlassBackground";
 import StarField from "./components/StarField";
@@ -43,6 +46,7 @@ const TITLES: Record<string, string> = {
   Import: "Import a track",
   Build: "Building your rollout",
   Dashboard: "Releases",
+  Library: "Library",
   Cover: "Cover Canvas",
   Distribute: "Distribution",
   Plan: "Release Plan",
@@ -50,6 +54,7 @@ const TITLES: Record<string, string> = {
   Landing: "Fan Page",
   Ads: "Ad Center",
   Ship: "Launch",
+  Rewards: "Rewards",
   Settings: "Settings",
 };
 
@@ -59,6 +64,7 @@ const PAGES: Record<string, React.ComponentType> = {
   Import,
   Build,
   Dashboard,
+  Library,
   Cover,
   Distribute,
   Plan,
@@ -66,6 +72,7 @@ const PAGES: Record<string, React.ComponentType> = {
   Landing,
   Ads,
   Ship,
+  Rewards,
   Settings,
 };
 
@@ -73,6 +80,13 @@ function Shell() {
   const { page, cloud, session } = useStore();
   const Current = PAGES[page] ?? Import;
   const [showAuth, setShowAuth] = useState(false);
+
+  // The analysis engine scales to zero when idle (~2GB model → 30-60s cold boot).
+  // Warm it the instant a signed-in artist opens the studio so it's ready by the
+  // time they scan a track or generate art, instead of a cold start under them.
+  useEffect(() => {
+    if (cloud && session) fetch(`${API_BASE}/health`).catch(() => {});
+  }, [cloud, session]);
 
   useEffect(() => {
     document.title = `${TITLES[page] ?? "Rollout"} · Rollout`;

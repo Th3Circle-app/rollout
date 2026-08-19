@@ -54,6 +54,34 @@ Deno.serve(async (req) => {
     // binds the Stripe customer to the trusted uid, and subscription events set
     // the plan + high-water mark authoritatively — see logic.mjs for the reasoning.
     const { status, note } = await handleEvent(db, event);
+
+    // Save the subscriber into the Resend audience (email list for lifecycle
+    // marketing). Isolated + best-effort: a Resend failure never affects the
+    // webhook's response to Stripe.
+    if (event.type === "checkout.session.completed") {
+      const email = event.data?.object?.customer_details?.email;
+      const resendKey = Deno.env.get("RESEND_API_KEY");
+      const audienceId = Deno.env.get("RESEND_AUDIENCE_ID");
+      if (email && resendKey && audienceId) {
+        try {
+          const name = event.data?.object?.customer_details?.name ?? "";
+          const [firstName, ...rest] = String(name).trim().split(/\s+/);
+          await fetch(`https://api.resend.com/audiences/${audienceId}/contacts`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              first_name: firstName || undefined,
+              last_name: rest.join(" ") || undefined,
+              unsubscribed: false,
+            }),
+          });
+        } catch (e) {
+          console.error("resend contact add failed (non-fatal)", e);
+        }
+      }
+    }
+
     return new Response(note, { status });
   } catch (e) {
     console.error("webhook handling failed", e);

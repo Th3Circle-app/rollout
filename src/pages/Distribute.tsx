@@ -172,7 +172,7 @@ export default function App() {
               <Button
                 disabled={!dist}
                 onClick={() => dist && window.open(dist.url, "_blank", "noopener,noreferrer")}
-                className="btn-glow text-white gap-2 disabled:opacity-40"
+                className="btn-primary text-white gap-2 disabled:opacity-40"
               >
                 <ExternalLink className="size-4" />
                 Open {dist ? dist.name : "distributor"} upload
@@ -198,7 +198,7 @@ export default function App() {
                   {dist.name} usually takes {dist.turnaround}. Don't sit idle — your calendar and captions are ready.
                 </p>
               </div>
-              <Button onClick={() => go("Plan")} className="shrink-0 btn-glow text-white gap-2">
+              <Button onClick={() => go("Plan")} className="shrink-0 btn-primary text-white gap-2">
                 Open release plan <ArrowRight className="size-4" />
               </Button>
             </div>

@@ -129,18 +129,15 @@ export default function App() {
         </div>
       </div>
       <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
-        <div className="max-w-[720px] text-center flex mb-10 flex-col items-center gap-3 w-full">
-          <span className={
-            "font-semibold uppercase text-[11px] tracking-[3.2px] " +
-            (allDone ? "text-[#46E0A8]" : "text-violet-500")
-          }>
+        <div className="hero-glow max-w-[720px] text-center flex mb-10 flex-col items-center gap-4 w-full">
+          <span className={"kicker kicker-center relative z-10 " + (allDone ? "text-[#46E0A8]" : "")}>
             {kicker}
           </span>
-          <h1 className="font-bold text-[#F2F0F7] text-5xl leading-12 tracking-tight">{title}</h1>
-          <p className="text-[#9A96AD] text-base leading-6">{sub}</p>
+          <h1 className="page-title relative z-10 text-5xl">{title}</h1>
+          <p className="relative z-10 text-[#9A96AD] text-[17px] leading-7">{sub}</p>
         </div>
 
-        <div className="max-w-[720px] edge rounded-3xl bg-[#15151C] border-white/8 border-1 border-solid flex p-10 flex-col gap-8 w-full">
+        <div className="panel max-w-[720px] rounded-3xl flex p-10 flex-col gap-8 w-full">
           <div className="flex justify-between items-start gap-6">
             <div className="flex items-center gap-4">
               <div className="size-12 rounded-2xl bg-[#1E1E28] border-white/8 border-1 border-solid flex justify-center items-center">
@@ -217,7 +214,7 @@ export default function App() {
         <div className="flex mt-8 items-center gap-4">
           {allDone ? (
             <>
-              <Button onClick={() => go("Dashboard")} className="font-semibold rounded-xl bg-violet-500 hover:bg-[#7c4dec] text-white text-sm leading-5 p-6 gap-2">
+              <Button onClick={() => go("Dashboard")} className="btn-primary font-semibold rounded-xl text-white text-sm leading-5 p-6 gap-2">
                 View my rollout
                 <ArrowRight className="size-4" />
               </Button>

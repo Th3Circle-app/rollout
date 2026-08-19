@@ -9,10 +9,13 @@
 // each awaitable, resolving to { data, error }.
 
 const PRICE_TIER = {
-  "price_1TyGoVRwEqAVdib6uCxPyAZE": "artist", // monthly
-  "price_1TyGolRwEqAVdib6LmieUdOX": "artist", // annual
-  "price_1TyGq5RwEqAVdib6I5FnGqPk": "studio", // monthly
-  "price_1TyGqFRwEqAVdib6Xp8K5YMY": "studio", // annual
+  "price_1TyGoVRwEqAVdib6uCxPyAZE": "artist", // monthly $15 (also the $7 trial base)
+  "price_1TyGolRwEqAVdib6LmieUdOX": "artist", // annual $150
+  "price_1U5aSdRwEqAVdib6ZBSgAwrs": "studio", // monthly $29
+  "price_1U5aShRwEqAVdib6LqxsiEkW": "studio", // annual $290
+  // legacy $20 Studio prices — kept so any earlier sub still maps
+  "price_1TyGq5RwEqAVdib6I5FnGqPk": "studio", // monthly $20 (retired)
+  "price_1TyGqFRwEqAVdib6Xp8K5YMY": "studio", // annual $200 (retired)
 };
 
 // Apply a subscription event to the plan, matched by stripe_customer_id.
@@ -52,6 +55,14 @@ export async function applySubscription(db, sub, created) {
     .or(`stripe_event_ts.is.null,stripe_event_ts.lt.${created}`)
     .select("id");
   if (updErr) throw updErr;
+  // Loyalty streak anchor: stamp member_since on the FIRST paid activation only
+  // (idempotent — `.is null` means a re-activation after cancel starts fresh).
+  if (active) {
+    await db.from("rollout_artists")
+      .update({ member_since: new Date(created * 1000).toISOString() })
+      .eq("stripe_customer_id", sub.customer)
+      .is("member_since", null);
+  }
   return (hit?.length ?? 0) > 0 ? "applied" : "stale";
 }
 
@@ -101,7 +112,7 @@ export async function handleEvent(db, event) {
     // re-subscribed) matches 0 rows (sub id no longer bound); a reordered older
     // delete is dropped by the stripe_event_ts guard.
     const { data: cleared } = await db.from("rollout_artists")
-      .update({ plan: "free", stripe_subscription_id: null, stripe_event_ts: created })
+      .update({ plan: "free", stripe_subscription_id: null, stripe_event_ts: created, member_since: null })
       .eq("stripe_customer_id", sub.customer)
       .eq("stripe_subscription_id", sub.id)
       .or(`stripe_event_ts.is.null,stripe_event_ts.lt.${created}`)

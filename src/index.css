@@ -105,6 +105,17 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+/* The sign-in card sits over the 3D headphones + starfield, so it needs a much
+   more solid background than the studio's glass panels or the text washes out. */
+.auth-card.glass {
+  background: rgba(15, 15, 21, 0.94);
+  backdrop-filter: blur(30px) saturate(1.2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.2);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
 /* transparent so the fixed WebGL glass background shows through the studio */
 .app-bg {
   background: transparent;

@@ -56,9 +56,11 @@ def available():
 
 
 def queries_for(style, moods):
+    import random
     qs = list(STYLE_QUERIES.get(style, STYLE_QUERIES["film"]))
     for m in (moods or [])[:2]:
-        qs += MOOD_QUERIES.get(m, [])[:1]
+        qs += MOOD_QUERIES.get(m, [])
+    random.shuffle(qs)  # vary the footage themes on every render
     return qs[:4]
 
 
@@ -71,8 +73,12 @@ def _search(query, key, per_page=3):
         })
     )
     # carries the Pexels key — don't follow a redirect to another host (key leak)
-    # and cap the read so a misbehaving response can't exhaust memory
-    req = urllib.request.Request(url, headers={"Authorization": key})
+    # and cap the read so a misbehaving response can't exhaust memory. A real
+    # User-Agent is required: Pexels 403s the default "Python-urllib" agent.
+    req = urllib.request.Request(url, headers={
+        "Authorization": key,
+        "User-Agent": "Mozilla/5.0 (Rollout b-roll engine)",
+    })
     with _NO_REDIR.open(req, timeout=60) as r:
         return json.loads(r.read(8 * 1024 * 1024))
 
@@ -82,6 +88,7 @@ def fetch_clips(style, moods, n=4):
     key = os.environ.get("PEXELS_KEY", "")
     if not key:
         return []
+    import random
     paths = []
     for q in queries_for(style, moods):
         if len(paths) >= n:
@@ -91,12 +98,16 @@ def fetch_clips(style, moods, n=4):
             os.path.join(CACHE, f) for f in os.listdir(CACHE)
             if f.startswith(slug + "__")
         ]
-        if cached:
-            paths.append(cached[0])
+        # Reuse a cached clip most of the time (fast), but sometimes fetch a fresh
+        # one so the same song re-rendered doesn't always get identical footage.
+        if cached and (len(cached) >= 3 or random.random() < 0.5):
+            paths.append(random.choice(cached))
             continue
         try:
             data = _search(q, key)
-            for video in data.get("videos", []):
+            vids = data.get("videos", [])
+            random.shuffle(vids)  # pick a random matching clip, not always the first
+            for video in vids:
                 best = None
                 for vf in video.get("video_files", []):
                     w, h = vf.get("width") or 0, vf.get("height") or 0

@@ -1,0 +1,25 @@
+========================================================================
+ROLLOUT — post copy (separate post about the product)
+Assets in this folder: landing_hero.png, studio.png, rollout_hero_clip.mp4
+========================================================================
+
+--- POST (long) ---
+
+Rollout — a real-time 3D music launch platform I built.
+
+An artist drops one finished song and gets a whole release back: AI cover art on a layered canvas, a beat-synced lyric video, a release calendar with pre-written captions, a hosted fan page, and an ad campaign. One platform, start to finish.
+
+The landing is hand-written WebGL and GLSL. A raymarched glass blob that morphs and reacts to your cursor sits behind a real 3D headphones model, with drifting smoke and a star field, all running in a single WebGL context so it holds up across devices instead of fighting for the GPU.
+
+Under the hood it's a real product, not a demo: multi-tenant SaaS on Supabase with Postgres row-level security, Stripe billing with server-enforced plans, and a Python engine that reads the song's key, tempo and mood and turns that reading into the whole visual and marketing direction.
+
+Stack: vanilla JS + WebGL, Supabase, Stripe, Netlify, and a CLAP audio model for the vibe read.
+
+
+--- SHORT (caption for the image/clip) ---
+
+Rollout, a real-time 3D music launch platform I built. Hand-written WebGL hero, multi-tenant SaaS behind it with Stripe billing and Postgres row-level security. Drop one song, get the whole release.
+
+
+--- NOTE ---
+No live link yet (launch is pending), so leave the URL off or say "launching soon."

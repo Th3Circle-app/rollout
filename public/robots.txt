@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rollout.th3circle.app/sitemap.xml

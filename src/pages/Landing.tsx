@@ -78,7 +78,7 @@ ${buttons || '      <div class="foot">Add your streaming links to get started</d
 }
 
 export default function App() {
-  const { release, session } = useStore();
+  const { release, session, go, setRelease } = useStore();
   const r = release ?? {
     filename: "Afterglow Nova.wav",
     title: "Afterglow",
@@ -173,6 +173,8 @@ export default function App() {
       );
       if (error) throw error;
       setPubState("done");
+      // Mark the release page step complete so the Dashboard chip turns green.
+      if (release && !release.pagePublished) setRelease({ ...release, pagePublished: true });
     } catch {
       setPubState("err");
     }
@@ -222,14 +224,14 @@ export default function App() {
           {/* controls */}
           <div className="flex flex-col gap-8 max-w-md flex-1">
             <div className="flex flex-col gap-2">
-              <h1 className="font-bold text-3xl tracking-tight">Release page</h1>
-              <p className="text-[#9A96AD] text-sm">
+              <h1 className="page-title text-3xl">Release page</h1>
+              <p className="text-[#9A96AD] text-[17px] leading-7">
                 One link for the drop. Hosted on Th3Circle, owned by you, no third-party smart-link tax.
               </p>
             </div>
 
             <div className="flex flex-col gap-4">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Streaming links</div>
+              <div className="section-label">Streaming links</div>
               {links.map((l) => (
                 <div key={l.key} className="flex items-center gap-3">
                   <span className="size-2.5 rounded-full shrink-0" style={{ background: l.color }} />
@@ -238,19 +240,19 @@ export default function App() {
                     value={l.url}
                     onChange={(e) => setUrl(l.key, e.target.value)}
                     placeholder={`https://...`}
-                    className="flex-1 rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+                    className="flex-1 rounded-xl bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
                   />
                 </div>
               ))}
             </div>
 
             <div className="flex flex-col gap-2">
-              <div className="uppercase text-[#9A96AD] text-xs tracking-widest">Release date</div>
+              <div className="section-label">Release date</div>
               <input
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 placeholder="Aug 15"
-                className="rounded-lg bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40 w-40"
+                className="rounded-xl bg-[#1E1E28] border border-white/10 px-3 py-2 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40 w-40"
               />
             </div>
 
@@ -258,19 +260,24 @@ export default function App() {
               <Button
                 onClick={publish}
                 disabled={!canPublish || pubState === "publishing"}
-                className="btn-glow text-white gap-2 w-full disabled:opacity-50"
+                className="btn-primary rounded-xl text-white gap-2 w-full disabled:opacity-50"
               >
                 {pubState === "publishing" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
                 {pubState === "done" ? "Update live page" : pubState === "publishing" ? "Publishing…" : "Publish page"}
               </Button>
 
               {pubState === "done" && (
-                <div className="rounded-lg bg-[#46E0A8]/10 border border-[#46E0A8]/30 px-3 py-2 text-center text-[13px] text-[#46E0A8]">
+                <div className="rounded-xl bg-[#46E0A8]/10 border border-[#46E0A8]/30 px-3 py-2 text-center text-[13px] text-[#46E0A8]">
                   Live at <span className="font-mono">{publicHost}</span>
                 </div>
               )}
+              {pubState === "done" && (
+                <Button onClick={() => go("Dashboard")} className="btn-primary rounded-xl text-white gap-2 w-full">
+                  <Check className="size-4" /> Done — back to release
+                </Button>
+              )}
               {pubState === "err" && (
-                <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-center text-[13px] text-red-400">
+                <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-3 py-2 text-center text-[13px] text-red-400">
                   Couldn't publish. Try again in a moment.
                 </div>
               )}

@@ -3,6 +3,10 @@
 $0 rule: pure templating seeded by the real vibe analysis — no hosted LLM.
 Each caption carries a {LINK} slot so Step 6 (live link sync) can inject the
 streaming URL the moment it exists.
+
+Now description-aware (the artist's own words about the song shape the copy),
+variant-aware (regenerate gives a fresh take), and tier-scalable (higher tiers
+get a longer campaign via `count`).
 """
 import random
 
@@ -42,7 +46,7 @@ def _pick(rng, mood_pool):
     return rng.choice(lines) if lines else "new one on the way"
 
 
-def _lyric_quotes(lyrics, rng, n=2):
+def _lyric_quotes(lyrics, rng, n=3):
     """Pick short, punchy lines from the real lyrics to quote in captions."""
     if not lyrics:
         return []
@@ -52,12 +56,31 @@ def _lyric_quotes(lyrics, rng, n=2):
     return good[:n]
 
 
-def generate_captions(title, artist, moods=None, keywords=None, date="", link="", lyrics=""):
+def _about_sentences(about):
+    """Split the artist's description into usable sentence fragments."""
+    if not about:
+        return []
+    parts = [p.strip() for p in about.replace("\n", " ").replace("!", ".").replace("?", ".").split(".")]
+    return [p for p in parts if len(p) >= 8]
+
+
+def generate_captions(title, artist, moods=None, keywords=None, date="", link="",
+                      lyrics="", about="", variant=0, count=7):
     moods = [m.lower() for m in (moods or [])]
     keywords = keywords or []
-    # deterministic per song so regenerating the page doesn't shuffle the plan
-    rng = random.Random(f"{title}|{artist}")
+    about = (about or "").strip()
+    # variant salts the seed so "Regenerate" produces a genuinely fresh plan
+    # while a given (song, variant) stays stable across page reloads.
+    rng = random.Random(f"{title}|{artist}|{variant}")
     quotes = _lyric_quotes(lyrics, rng)
+    abouts = _about_sentences(about)
+    rng.shuffle(abouts)
+
+    def about_line(fallback):
+        return abouts[0] if abouts else fallback
+
+    def about_line2(fallback):
+        return abouts[1] if len(abouts) > 1 else about_line(fallback)
 
     t = title.upper()
     when = f" {date}" if date else " soon"
@@ -66,65 +89,50 @@ def generate_captions(title, artist, moods=None, keywords=None, date="", link=""
     tags = list(HASHTAG_BASE)
     for m in moods:
         tags += MOOD_TAGS.get(m, [])
-    tags = " ".join("#" + t for t in dict.fromkeys(tags))
+    tags = " ".join("#" + x for x in dict.fromkeys(tags))
 
-    caps = [
-        {
-            "id": "announce",
-            "phase": "pre-release",
-            "platform": "All",
-            "label": "Announcement",
-            "text": f"{t}. out{when}.\n\n{_pick(rng, moods)}.\n\n{tags}",
-        },
-        {
-            "id": "countdown",
-            "phase": "pre-release",
-            "platform": "TikTok / Reels",
-            "label": "Countdown teaser",
-            "text": (
-                f'"{quotes[0]}"\n\n{title} drops{when} 🖤\n\n{tags}'
-                if quotes
-                else f"POV: you've been sitting on a song called {title} and it finally drops{when} 🖤\n\n{_pick(rng, moods)}\n\n{tags}"
-            ),
-        },
-        {
-            "id": "behind",
-            "phase": "pre-release",
-            "platform": "Instagram",
-            "label": "Behind the song",
-            "text": f"the story behind {t}:\n\n{_pick(rng, moods)}. every sound on this record was a choice — {', '.join(keywords[:3]) if keywords else 'every detail'}.\n\ndrops{when}. comment and I'll remind you.",
-        },
-        {
-            "id": "dropday",
-            "phase": "release-day",
-            "platform": "All",
-            "label": "Drop day",
-            "text": f"{t} IS OUT EVERYWHERE.\n\nstream it here: {link_slot}\n\n{_pick(rng, moods)}.\n\n{tags}",
-        },
-        {
-            "id": "dropday_short",
-            "phase": "release-day",
-            "platform": "X / Stories",
-            "label": "Drop day (short)",
-            "text": f"{t} is out now.\n{link_slot}",
-        },
-        {
-            "id": "post1",
-            "phase": "post-release",
-            "platform": "TikTok / Reels",
-            "label": "Week-one push",
-            "text": (
-                f'"{quotes[1]}" — {title}, out now\n\nfull song: {link_slot}\n\n{tags}'
-                if len(quotes) > 1
-                else f"if {title.lower()} shows up on your fyp it's because the algorithm knows you need it.\n\nfull song: {link_slot}\n\n{tags}"
-            ),
-        },
-        {
-            "id": "thanks",
-            "phase": "post-release",
-            "platform": "All",
-            "label": "Fan thank-you",
-            "text": f"a week of {t}. every stream, every share, every message — I see all of it. this is why I make music.\n\nif you haven't heard it yet: {link_slot}",
-        },
+    # A caption POOL ordered by PRIORITY (essentials first). We return the top
+    # `count` — so a short (free) plan still lands a coherent arc (announce →
+    # drop → thanks), and longer (paid) plans fill in the full campaign. Each
+    # carries a `day` offset relative to release so the calendar is self-describing.
+    pool = [
+        {"id": "dropday", "day": 0, "phase": "release-day", "platform": "All", "label": "Drop day",
+         "text": f"{t} IS OUT EVERYWHERE.\n\nstream it here: {link_slot}\n\n{about_line(_pick(rng, moods))}.\n\n{tags}"},
+        {"id": "announce", "day": -14, "phase": "pre-release", "platform": "All", "label": "Announcement",
+         "text": f"{t}. out{when}.\n\n{about_line(_pick(rng, moods))}.\n\n{tags}"},
+        {"id": "thanks", "day": 7, "phase": "post-release", "platform": "All", "label": "Fan thank-you",
+         "text": f"a week of {t}. every stream, every share, every message — I see all of it. this is why I make music.\n\nif you haven't heard it yet: {link_slot}"},
+        {"id": "behind", "day": -7, "phase": "pre-release", "platform": "Instagram", "label": "Behind the song",
+         "text": (f"the story behind {t}:\n\n{about_line('every sound on this record was a choice')}."
+                  + (f" {about_line2('')}." if len(abouts) > 1 else "")
+                  + f"\n\ndrops{when}. comment and I'll remind you.")},
+        {"id": "countdown", "day": -3, "phase": "pre-release", "platform": "TikTok / Reels", "label": "Countdown teaser",
+         "text": (f'"{quotes[0]}"\n\n{title} drops{when} 🖤\n\n{tags}' if quotes
+                  else f"POV: you've been sitting on a song called {title} and it finally drops{when} 🖤\n\n{about_line(_pick(rng, moods))}\n\n{tags}")},
+        {"id": "post1", "day": 3, "phase": "post-release", "platform": "TikTok / Reels", "label": "Week-one push",
+         "text": (f'"{quotes[1]}" — {title}, out now\n\nfull song: {link_slot}\n\n{tags}' if len(quotes) > 1
+                  else f"if {title.lower()} shows up on your fyp it's because the algorithm knows you need it.\n\nfull song: {link_slot}\n\n{tags}")},
+        {"id": "dropday_short", "day": 0, "phase": "release-day", "platform": "X / Stories", "label": "Drop day (short)",
+         "text": f"{t} is out now.\n{link_slot}"},
+        {"id": "teaser", "day": -10, "phase": "pre-release", "platform": "TikTok / Reels", "label": "First teaser",
+         "text": f"something's coming.\n\n{about_line(_pick(rng, moods))}.\n\n{title}{when}. 🔒\n\n{tags}"},
+        {"id": "lastcall", "day": -1, "phase": "pre-release", "platform": "Stories", "label": "Night before",
+         "text": f"tomorrow.\n\n{t}. set your reminder. {about_line('you are not ready').lower()}."},
+        {"id": "lyricpush", "day": 5, "phase": "post-release", "platform": "Instagram", "label": "Lyric moment",
+         "text": (f'"{quotes[2] if len(quotes) > 2 else (quotes[0] if quotes else about_line(title))}"\n\n'
+                  f"this line hits different. {title} — out now: {link_slot}\n\n{tags}")},
+        {"id": "milestone", "day": 14, "phase": "post-release", "platform": "All", "label": "Two-week milestone",
+         "text": f"two weeks of {t}. 🖤\n\n{about_line('thank you for hearing me')}.\n\nstill on repeat? {link_slot}"},
+        {"id": "playlist", "day": 21, "phase": "post-release", "platform": "All", "label": "Playlist pitch",
+         "text": f"if {title} lives in your rotation, add it to a playlist so it finds the next person who needs it.\n\n{link_slot}\n\n{tags}"},
+        {"id": "duet", "day": 10, "phase": "post-release", "platform": "TikTok", "label": "Creator prompt",
+         "text": f"use {title} in your next post — I'm watching the tag and reposting my favorites.\n\n{about_line(_pick(rng, moods))}.\n\n{tags}"},
+        {"id": "throwback", "day": 28, "phase": "post-release", "platform": "All", "label": "One-month mark",
+         "text": f"a month since {t} dropped and it still means everything to me.\n\n{about_line('this one was real')}.\n\n{link_slot}"},
     ]
-    return {"captions": caps, "has_link": bool(link.strip())}
+
+    count = max(1, min(int(count or 7), len(pool)))
+    chosen = pool[:count]
+    # present the calendar in chronological order
+    chosen = sorted(chosen, key=lambda c: c["day"])
+    return {"captions": chosen, "has_link": bool(link.strip()), "count": len(chosen)}

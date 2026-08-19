@@ -24,7 +24,10 @@ export default function App() {
     const k = `rollout_dist_${(r.artist + "-" + r.title).toLowerCase().replace(/\s+/g, "-")}`;
     submitted = Boolean(JSON.parse(localStorage.getItem(k) || "null")?.submittedAt);
   } catch { /* ignore */ }
-  const flags = [Boolean(r.coverUrl), Boolean(r.lyrics), Boolean(releaseDate), submitted, Boolean(streamingLink)];
+  const lyricVideoDone = Boolean((r as { lyricVideoDone?: boolean }).lyricVideoDone);
+  const pagePublished = Boolean((r as { pagePublished?: boolean }).pagePublished);
+  const pageReady = pagePublished || Boolean(streamingLink);
+  const flags = [Boolean(r.coverUrl), lyricVideoDone, Boolean(releaseDate), submitted, pageReady];
   const pct = Math.round((flags.filter(Boolean).length / flags.length) * 100);
   const daysToGo = releaseDate
     ? Math.max(0, Math.ceil((new Date(releaseDate).getTime() - Date.now()) / 86400000))
@@ -36,10 +39,10 @@ export default function App() {
     label: string; sub?: string; page: string; ready: boolean; readyLabel?: string; img?: string; wide?: boolean; ai?: boolean;
   }[] = [
     { label: "Cover Art", page: "Cover", ready: Boolean(r.coverUrl), img: r.coverUrl, ai: true },
-    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: Boolean(r.lyrics), readyLabel: r.lyrics ? "Ready" : "Needs lyrics", ai: true },
+    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, readyLabel: lyricVideoDone ? "Ready" : r.lyrics ? "Make video" : "Needs lyrics", ai: true },
     { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), readyLabel: releaseDate ? "Ready" : "Set a date" },
     { label: "Distribution", page: "Distribute", ready: submitted, readyLabel: submitted ? "Submitted" : "Needs review" },
-    { label: "Release Page", page: "Landing", ready: linkLive, readyLabel: linkLive ? "Ready" : "Needs review", wide: true },
+    { label: "Release Page", page: "Landing", ready: pageReady, readyLabel: pageReady ? "Ready" : "Needs review", wide: true },
   ];
 
   const Chip = ({ ok, label }: { ok: boolean; label?: string }) => (
@@ -65,7 +68,7 @@ export default function App() {
             <div className="flex items-center gap-5">
               <div className="size-16 shrink-0 rounded-xl bg-[#1E1E28] border-white/8 border-1 border-solid overflow-hidden">
                 {r.coverUrl ? (
-                  <img alt={`${r.title} cover art thumbnail`} className="object-cover w-full h-full" src={r.coverUrl} />
+                  <img alt={`${r.title} cover art thumbnail`} referrerPolicy="no-referrer" className="object-cover w-full h-full" src={r.coverUrl} />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center font-mono text-[10px] text-[#5E5A72]">no art</div>
                 )}
@@ -117,7 +120,7 @@ export default function App() {
                 >
                   <div className="rounded-xl bg-[#1E1E28] border-white/8 border-1 border-solid h-28 overflow-hidden">
                     {a.img ? (
-                      <img src={a.img} alt={`${a.label} preview`} className="object-cover w-full h-full" />
+                      <img src={a.img} alt={`${a.label} preview`} referrerPolicy="no-referrer" className="object-cover w-full h-full" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center font-mono text-[10px] text-[#5E5A72]">
                         open to create

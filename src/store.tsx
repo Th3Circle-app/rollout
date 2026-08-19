@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, cloudEnabled } from "./lib/supabase";
+import { clearAllVideos } from "./lib/videoStore";
 
 export type Release = {
   filename: string;
@@ -15,8 +16,28 @@ export type Release = {
   file_id?: string;
   lyrics?: string;
   genre?: string;
+  lyricVideoDone?: boolean; // a lyric video was rendered + kept for this release
+  pagePublished?: boolean;  // the fan release page has been published
   id?: string; // cloud row id (rollout_releases)
 } | null;
+
+// Every browser-local artifact of a workspace. Wiped when a DIFFERENT account
+// signs in on the same browser, so nothing leaks between accounts and a brand
+// new account always starts fresh. Cloud data (rollout_releases) is RLS-scoped
+// and reloads per-account on its own.
+const ACTIVE_UID_KEY = "rollout_active_uid";
+export function resetLocalWorkspace() {
+  try {
+    const kill: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("rollout_") && k !== ACTIVE_UID_KEY) kill.push(k);
+    }
+    kill.forEach((k) => localStorage.removeItem(k));
+  } catch { /* ignore */ }
+  // rendered lyric videos live in IndexedDB — clear those too (best-effort)
+  clearAllVideos().catch(() => { /* ignore */ });
+}
 
 // Stable cover-concept seeds per session: Cover shows the SAME 4 concepts
 // across visits (and Build's prefetch actually warms them). "New set" rotates.
@@ -54,22 +75,38 @@ export const PLAN_LABEL: Record<Plan, string> = {
   free: "Free", artist: "Rollout Artist", studio: "Rollout Studio",
 };
 
-// Live Stripe payment links (created 2026-07-28, Th3Circle account)
+// Live Stripe payment links (Th3Circle account). Studio re-priced to $29/$290
+// on 2026-08-17; Artist stays $15/$150.
 export const PAYMENT_LINKS: Record<string, string> = {
   "artist:month": "https://buy.stripe.com/aFa4gB8cV5qv7izfpx2880g",
   "artist:year": "https://buy.stripe.com/28EcN7bp7cSXfP53GP2880h",
-  "studio:month": "https://buy.stripe.com/aFaeVf64N3in1Yf2CL2880i",
-  "studio:year": "https://buy.stripe.com/dRmeVf3WFaKPcCT9192880j",
+  "studio:month": "https://buy.stripe.com/fZu5kFgJr5qv6evdhp2880k",
+  "studio:year": "https://buy.stripe.com/6oU28t2SB3in0Ub6T12880l",
 };
 
-export function checkoutUrl(tier: "artist" | "studio", interval: "month" | "year",
-                            uid?: string, email?: string) {
-  const base = PAYMENT_LINKS[`${tier}:${interval}`];
+// $7 for 7 days of full access, then $15/mo Artist. One-time $7 + Artist price
+// on a 7-day trial. The webhook maps the Artist price -> 'artist' during trial.
+export const TRIAL_LINK = "https://buy.stripe.com/bJebJ3gJrbOT6evfpx2880m";
+export const TRIAL_PRICE = 7;
+export const TRIAL_DAYS = 7;
+
+// Append the signed-in uid (client_reference_id) so the webhook can bind the
+// Stripe customer to this account, plus prefill their email.
+export function withRef(base: string, uid?: string, email?: string) {
   const params = new URLSearchParams();
   if (uid) params.set("client_reference_id", uid);
   if (email) params.set("prefilled_email", email);
   const q = params.toString();
   return q ? `${base}?${q}` : base;
+}
+
+export function checkoutUrl(tier: "artist" | "studio", interval: "month" | "year",
+                            uid?: string, email?: string) {
+  return withRef(PAYMENT_LINKS[`${tier}:${interval}`], uid, email);
+}
+
+export function trialUrl(uid?: string, email?: string) {
+  return withRef(TRIAL_LINK, uid, email);
 }
 
 // How many songs a free account can run through the pipeline.
@@ -97,6 +134,8 @@ type Store = {
   session: Session | null;
   cloud: boolean;
   signOut: () => void;
+  avatarUrl: string;
+  updateAvatar: (url: string) => Promise<void>;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -142,8 +181,8 @@ function loadSongs(): string[] {
 }
 
 const PAGE_NAMES = [
-  "Import", "Build", "Dashboard", "Cover", "Distribute", "Plan",
-  "Lyrics", "Landing", "Ads", "Ship", "Settings",
+  "Import", "Build", "Dashboard", "Library", "Cover", "Distribute", "Plan",
+  "Lyrics", "Landing", "Ads", "Ship", "Rewards", "Settings",
 ];
 
 function initialPage(): string {
@@ -244,7 +283,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── cloud session + profile + release sync (no-op in local mode) ────────
   const [session, setSession] = useState<Session | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
   const sessionRef = useRef<Session | null>(null);
+  // Which uid we've already run the workspace-isolation check for, so it fires
+  // once per account per load — not on every token refresh (which would risk
+  // wiping a just-created release before its first sync completes).
+  const verifiedUidRef = useRef<string | null>(null);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => {
@@ -263,18 +307,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!supabase || !session) return;
     (async () => {
       const uid = session.user.id;
+      // Account separation on a shared browser: wipe every local artifact so a
+      // new account never inherits the previous one's release/campaigns/videos.
+      //  1. a DIFFERENT uid was active here before, OR
+      //  2. the cached local release simply doesn't belong to this account
+      //     (covers browsers contaminated before uid-tracking existed).
+      let switched = false;
+      if (verifiedUidRef.current !== uid) {
+        try {
+          const prevUid = localStorage.getItem(ACTIVE_UID_KEY);
+          if (prevUid && prevUid !== uid) switched = true;
+        } catch { /* ignore */ }
+        if (!switched && release?.id) {
+          const { data: owned } = await supabase
+            .from("rollout_releases").select("id")
+            .eq("id", release.id).eq("artist_id", uid).maybeSingle();
+          if (!owned) switched = true; // foreign release cached locally → drop it
+        }
+        if (switched) {
+          resetLocalWorkspace();
+          setReleaseState(null);
+          setReleaseDateState("");
+          setStreamingLinkState("");
+          setSongs([]);
+          setAvatarUrl("");
+        }
+        try { localStorage.setItem(ACTIVE_UID_KEY, uid); } catch { /* ignore */ }
+        verifiedUidRef.current = uid;
+      }
+
       const meta = (session.user.user_metadata || {}) as { artist_name?: string };
       await supabase.from("rollout_artists").upsert(
         { id: uid, email: session.user.email || "", artist_name: meta.artist_name || "" },
         { onConflict: "id", ignoreDuplicates: false }
       );
-      const { data: prof } = await supabase.from("rollout_artists").select("plan,songs_used").eq("id", uid).single();
+      const { data: prof } = await supabase.from("rollout_artists").select("plan,songs_used,avatar_url").eq("id", uid).single();
       if (prof) {
         setPlanState(prof.plan as Plan);
         setSongs((old) => (old.length >= prof.songs_used ? old : Array.from({ length: prof.songs_used }, (_, i) => old[i] ?? `cloud-${i}`)));
+        setAvatarUrl((prof as { avatar_url?: string }).avatar_url || "");
       }
-      // hydrate the most recent release if local is empty
-      if (!release) {
+      // hydrate the most recent release if local is empty (or was just wiped)
+      if (switched || !release) {
         const { data: rows } = await supabase
           .from("rollout_releases").select("*").eq("artist_id", uid)
           .order("updated_at", { ascending: false }).limit(1);
@@ -286,6 +360,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             duration: row.duration, moods: row.moods || [], keywords: row.keywords || [],
             genre: row.genre || "", lyrics: row.lyrics || "",
             coverUrl: row.cover_url || "", file_id: row.file_id || "",
+            lyricVideoDone: Boolean(row.lyric_video_done),
+            pagePublished: Boolean(row.page_published),
           });
           if (row.release_date) setReleaseDateState(String(row.release_date));
           if (row.streaming_link) setStreamingLinkState(row.streaming_link);
@@ -313,6 +389,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         moods: release.moods, keywords: release.keywords,
         genre: release.genre || "", lyrics: release.lyrics || "",
         cover_url: release.coverUrl || "",
+        lyric_video_done: release.lyricVideoDone || false,
+        page_published: release.pagePublished || false,
         release_date: releaseDate || null,
         streaming_link: streamingLink || "",
         // suffix with the id slice so two artists with the same "Artist - Title"
@@ -327,6 +405,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const signOut = () => {
     if (supabase) supabase.auth.signOut();
+  };
+
+  // Persist the artist's profile picture URL (avatar_url is a non-privileged
+  // column, so the owner's own UPDATE is allowed by RLS + the protect trigger).
+  const updateAvatar = async (url: string) => {
+    setAvatarUrl(url);
+    if (supabase && sessionRef.current) {
+      try {
+        await supabase.from("rollout_artists")
+          .update({ avatar_url: url }).eq("id", sessionRef.current.user.id);
+      } catch { /* best-effort; local state already reflects it */ }
+    }
   };
 
   // Re-running the same song doesn't burn another slot.
@@ -363,6 +453,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         session,
         cloud: cloudEnabled,
         signOut,
+        avatarUrl,
+        updateAvatar,
       }}
     >
       {children}

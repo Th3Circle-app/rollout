@@ -97,7 +97,7 @@ export default function App() {
         </h1>
       </div>
 
-      <div className="max-w-[720px] panel rounded-2xl flex mb-8 p-6 items-center gap-6 w-full">
+      <div className="max-w-[720px] panel rounded-3xl flex mb-8 p-6 items-center gap-6 w-full">
         <div className="size-24 shrink-0 rounded-xl overflow-hidden bg-[#1E1E28]">
           {r.coverUrl ? (
             <img alt={`${r.title} cover art`} className="object-cover w-full h-full" src={r.coverUrl} />
@@ -114,8 +114,8 @@ export default function App() {
         </div>
       </div>
 
-      <div className="max-w-[720px] panel rounded-2xl flex mb-12 p-8 flex-col items-center gap-3 w-full">
-        <span className="font-mono uppercase text-[#5E5A72] text-xs leading-4 tracking-[2.4px]">
+      <div className="max-w-[720px] panel rounded-3xl flex mb-12 p-8 flex-col items-center gap-3 w-full">
+        <span className="section-label">
           {dateLabel ? `Releases ${dateLabel}` : "Set your release date on the Release Plan"}
         </span>
         {cd.valid && releaseDate ? (
@@ -136,8 +136,8 @@ export default function App() {
       </div>
 
       <div className="max-w-[720px] grid grid-cols-2 mb-8 gap-6 w-full">
-        <div className="panel rounded-2xl p-6">
-          <span className="block font-medium uppercase text-[#5E5A72] text-xs leading-4 tracking-[3.2px] mb-4">
+        <div className="panel rounded-3xl p-6">
+          <span className="block section-label mb-4">
             Going live
           </span>
           <div className="flex flex-col gap-4">
@@ -162,8 +162,8 @@ export default function App() {
             ))}
           </div>
         </div>
-        <div className="panel rounded-2xl p-6">
-          <span className="block font-medium uppercase text-[#5E5A72] text-xs leading-4 tracking-[3.2px] mb-4">
+        <div className="panel rounded-3xl p-6">
+          <span className="block section-label mb-4">
             Distribution
           </span>
           <div className="flex flex-col gap-4">
@@ -196,7 +196,7 @@ export default function App() {
         <Button
           onClick={schedule}
           disabled={scheduled || !releaseDate}
-          className="btn-primary font-semibold rounded-2xl text-white text-base leading-6 flex justify-center items-center gap-2 w-full h-14 disabled:opacity-50 disabled:shadow-none"
+          className="btn-primary font-semibold rounded-xl text-white text-base leading-6 flex justify-center items-center gap-2 w-full h-14 disabled:opacity-50 disabled:shadow-none"
         >
           <span>{scheduled ? "Release scheduled" : "Schedule release"}</span>
           {!scheduled && <ArrowRight className="size-4" />}

@@ -49,15 +49,31 @@ FONT_CANDIDATES = [
 ]
 
 
-def _font(size):
-    for p in FONT_CANDIDATES:
+# Bundled font library (backend/fonts/<id>.ttf) — the SAME ids the frontend
+# offers, so the picked font is exactly what renders. System ids fall back to
+# the platform bold sans.
+_FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+_FILE_FONTS = {
+    "anton", "archivoblack", "alfaslab", "titanone", "passion", "russo",
+    "righteous", "bungee", "shrikhand", "monoton", "bebas", "staatliches",
+    "fjalla", "kanit", "poppins", "abril", "dmserif", "pacifico", "lobster",
+    "sacramento", "marker", "bangers", "typewriter",
+}
+# script/handwritten faces read better in mixed case than ALL CAPS
+_SCRIPT_FONTS = {"pacifico", "lobster", "sacramento"}
+
+
+def _font(size, style="bold"):
+    cands = []
+    if style in _FILE_FONTS:
+        cands.append(os.path.join(_FONTS_DIR, f"{style}.ttf"))
+    cands += list(FONT_CANDIDATES)  # system bold fallback for any other/system id
+    for p in cands:
         if p and os.path.exists(p):
             try:
                 return ImageFont.truetype(p, size)
             except OSError:
                 continue
-    # Pillow >= 10.1 scales the built-in default to a size — far better than the
-    # old tiny bitmap when no system font is present.
     try:
         return ImageFont.load_default(size)
     except TypeError:
@@ -123,15 +139,17 @@ def prepare_background(cover_path_or_url):
     return img
 
 
-def render_text_card(text, artist_tag):
-    """Transparent card with the chunk text, wrapped, huge and centered."""
+def render_text_card(text, artist_tag, font_style="bold", position="center", rng=None):
+    """Transparent card with the chunk text — chosen font, chosen placement, and
+    ALWAYS kept safely inside the 720x1280 frame (wraps + shrinks to fit)."""
     card = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(card)
+    # script faces read better mixed-case; the bold/display faces want all-caps
+    disp = text if font_style in _SCRIPT_FONTS else text.upper()
     size = 92
-    font = _font(size)
-    # wrap to fit
-    max_w = W - 120
-    words = text.upper().split()
+    font = _font(size, font_style)
+    max_w = W - 130
+    words = disp.split()
     while True:
         lines, cur = [], ""
         for w_ in words:
@@ -144,24 +162,35 @@ def render_text_card(text, artist_tag):
                 cur = w_
         if cur:
             lines.append(cur)
-        if len(lines) <= 3 or size <= 44:
+        # shrink until it fits both the width (above) and a max of 4 lines
+        if len(lines) <= 4 or size <= 40:
             break
         size -= 8
-        font = _font(size)
-    line_h = size + 14
+        font = _font(size, font_style)
+    line_h = int(size * 1.16)
     total_h = line_h * len(lines)
-    y0 = (H - total_h) // 2
+
+    # vertical placement, clamped so text NEVER leaves the phone frame
+    top_pad, bot_pad = 210, 250
+    lo = top_pad
+    hi = max(top_pad, H - total_h - bot_pad)
+    if position == "top":
+        y0 = lo
+    elif position == "bottom":
+        y0 = hi
+    elif position == "random" and rng is not None:
+        y0 = rng.randint(lo, hi) if hi > lo else lo
+    else:
+        y0 = (H - total_h) // 2
+    y0 = max(60, min(y0, H - total_h - 60))  # hard safety clamp
+
     for i, ln in enumerate(lines):
         tw = d.textlength(ln, font=font)
         x = (W - tw) // 2
         y = y0 + i * line_h
-        # shadow
         d.text((x + 3, y + 4), ln, font=font, fill=(0, 0, 0, 200))
         d.text((x, y), ln, font=font, fill=(255, 255, 255, 255))
-    # artist tag
-    tag_font = _font(26)
-    tw = d.textlength(artist_tag, font=tag_font)
-    d.text(((W - tw) // 2, H - 140), artist_tag, font=tag_font, fill=(255, 255, 255, 170))
+    _ = artist_tag  # title/artist intentionally omitted — clean lyric video
     return card
 
 
@@ -291,7 +320,7 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
     }
 
 
-def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path):
+def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="bold", position="center"):
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
     start = find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
@@ -308,7 +337,9 @@ def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path):
 
     chunks = chunk_lyrics(lyrics, len(slots))
     artist_tag = f"{title.upper()} — {artist.upper()}" if artist else title.upper()
-    cards = [render_text_card(c, artist_tag) for c in chunks]
+    import random as _rnd
+    rng = _rnd.Random()  # fresh so "random" placement varies each render
+    cards = [render_text_card(c, artist_tag, font_style=font, position=position, rng=rng) for c in chunks]
 
     bg = prepare_background(cover)
     bw, bh = bg.size
@@ -367,3 +398,115 @@ def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path):
     finally:
         import shutil as _sh
         _sh.rmtree(tmpdir, ignore_errors=True)  # never leak the frame dir
+
+
+def _broll_bg_video(style, moods, tmpdir):
+    """Build a 15s vertical (720x1280) background video from vibe-matched Pexels
+    clips. Returns the path, or None if b-roll is unavailable / nothing fetched."""
+    from broll import fetch_clips, available
+    if not available():
+        return None
+    paths = fetch_clips(style or "film", moods or [], n=4)
+    if not paths:
+        return None
+    norm = []
+    for i, p in enumerate(paths):
+        npth = os.path.join(tmpdir, f"bn{i}.mp4")
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", p, "-t", "4",
+                 "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=24,setsar=1",
+                 "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", npth],
+                check=True, capture_output=True, timeout=120)
+            norm.append(npth)
+        except Exception:
+            continue
+    if not norm:
+        return None
+    listp = os.path.join(tmpdir, "bconcat.txt")
+    reps = max(1, (16 // (len(norm) * 4)) + 1)
+    with open(listp, "w") as fh:
+        for _ in range(reps):
+            for n in norm:
+                fh.write(f"file '{n}'\n")
+    bgv = os.path.join(tmpdir, "bg.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listp, "-t", "15",
+         "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
+        check=True, capture_output=True, timeout=180)
+    return bgv
+
+
+def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=None, style="", font="bold", position="center"):
+    """Same beat-synced kinetic type as the classic renderer, but over MOVING
+    vibe-matched stock footage instead of the static cover. ffmpeg overlays the
+    transparent text frames (+ a readability scrim) onto the b-roll video."""
+    y, sr = librosa.load(audio_path, mono=True, sr=44100)
+    start = find_hook(y, sr)
+    clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
+    tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
+    beats = list(librosa.frames_to_time(beat_frames, sr=sr))
+    if len(beats) < 4:
+        beats = list(np.arange(0, CLIP_SEC, 0.75))
+    slots = beats[::2]
+    if not slots or slots[0] > 0.4:
+        slots = [0.0] + slots
+    chunks = chunk_lyrics(lyrics, len(slots))
+    artist_tag = f"{title.upper()} — {artist.upper()}" if artist else title.upper()
+    import random as _rnd
+    rng = _rnd.Random()  # fresh so "random" placement varies each render
+    cards = [render_text_card(c, artist_tag, font_style=font, position=position, rng=rng) for c in chunks]
+
+    tmpdir = tempfile.mkdtemp(prefix="rollout_lvb_")
+    try:
+        bgv = _broll_bg_video(style, moods, tmpdir)
+        if not bgv:
+            raise RuntimeError("no b-roll clips available")
+
+        # readability scrim: transparent up top, darkening toward the bottom third
+        scrim = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(scrim)
+        for yy in range(H):
+            a = int(170 * max(0.0, (yy - H * 0.42) / (H * 0.58)))
+            sd.line([(0, yy), (W, yy)], fill=(0, 0, 0, min(170, a)))
+
+        n_frames = int(CLIP_SEC * FPS)
+        for f in range(n_frames):
+            t = f / FPS
+            idx = 0
+            for i in range(len(slots)):
+                if t >= slots[i]:
+                    idx = i
+            idx = min(idx, len(cards) - 1)
+            card = cards[idx]
+            dt = t - slots[min(idx, len(slots) - 1)]
+            pop = 1.0 + max(0.0, 0.14 * (1 - dt / 0.18)) if dt < 0.18 else 1.0
+            if pop > 1.001:
+                pw, ph = int(W * pop), int(H * pop)
+                scaled = card.resize((pw, ph), Image.BILINEAR)
+                ox, oy = (pw - W) // 2, (ph - H) // 2
+                card = scaled.crop((ox, oy, ox + W, oy + H))
+            frame = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            frame.alpha_composite(scrim)
+            frame.alpha_composite(card)
+            frame.save(os.path.join(tmpdir, f"o{f:05d}.png"))
+
+        clip_wav = os.path.join(tmpdir, "clip.wav")
+        import soundfile as sf
+        sf.write(clip_wav, clip, sr)
+
+        subprocess.run(
+            ["ffmpeg", "-y",
+             "-i", bgv,
+             "-framerate", str(FPS), "-i", os.path.join(tmpdir, "o%05d.png"),
+             "-i", clip_wav,
+             "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1[v]",
+             "-map", "[v]", "-map", "2:a",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+             "-c:a", "aac", "-b:a", "192k", "-shortest", out_path],
+            check=True, capture_output=True, timeout=600)
+        return {"hook_start": round(start, 1), "bpm": round(float(np.atleast_1d(tempo)[0])),
+                "chunks": len(chunks), "engine": "broll"}
+    finally:
+        import shutil as _sh
+        _sh.rmtree(tmpdir, ignore_errors=True)

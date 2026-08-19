@@ -1,6 +1,7 @@
 // Rollout layered cover compositor — Illustrator-style layer stack rendered
 // onto a single canvas. The preview and the 3000px export run the exact same
 // code, so what you see is what ships.
+import { fontFamily } from "@/lib/fonts";
 
 export type BlendMode = "multiply" | "overlay" | "screen" | "soft-light" | "color";
 
@@ -48,7 +49,7 @@ export const DEFAULT_LAYERS: Layers = {
   wash: { visible: true, opacity: 0.35, color1: "#8B5CF6", color2: "#F0A45B", blend: "overlay", angle: 135 },
   texture: { visible: true, opacity: 0.22, kind: "grain", scale: 1 },
   light: { visible: true, opacity: 0.55, kind: "vignette", color: "#000000" },
-  type: { visible: true, opacity: 1, font: "Arial Black", layout: "bottom", color: "#FFFFFF" },
+  type: { visible: true, opacity: 1, font: "arialblack", layout: "bottom", color: "#FFFFFF" },
 };
 
 // --- procedural texture tiles (cached per kind+scale) ---------------------
@@ -229,7 +230,7 @@ export function renderStack(
     }
     ctx.shadowColor = "rgba(0,0,0,0.55)";
     ctx.shadowBlur = size * 0.012;
-    ctx.font = `900 ${titleSize}px "${layers.type.font}", sans-serif`;
+    ctx.font = `900 ${titleSize}px ${fontFamily(layers.type.font)}, sans-serif`;
     ctx.fillText(title.toUpperCase(), x, yTitle);
     ctx.font = `500 ${artistSize}px "Helvetica Neue", sans-serif`;
     const prevTracking = ctx.letterSpacing;

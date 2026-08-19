@@ -1,0 +1,56 @@
+========================================================================
+1) REPLY TO ILYA
+========================================================================
+
+I appreciate that Ilya. Honestly it was mostly hardening rather than anything actively on fire, but a few were the kind that bite you in prod.
+
+The standout was server-side SSRF. A couple of endpoints fetch remote image URLs, and the guard resolved the hostname then opened the connection separately, so there was a DNS-rebinding window and it could be aimed at cloud metadata, including the CGNAT range that Python's ipaddress module doesn't flag as private. Fixed it by pinning the resolved IP and dialing that exact IP, so the check and the fetch can't disagree.
+
+The one I cared about most was a Postgres RLS gap. The trigger protecting the privileged columns (the plan and the Stripe IDs) fired on UPDATE but not INSERT, so a fresh row could be self-inserted with the plan already set to the paid tier. One line to also fire it on insert.
+
+Third was Stripe webhook ordering. Stripe redelivers and reorders events and my handler trusted arrival order, so a late or duplicate subscription.updated could re-grant a plan that was already cancelled. Added a per-row high-water mark so an older event can't overwrite a newer one.
+
+The rest was resource stuff, a temp-dir leak in a background job and a body-size cap a chunked upload slipped past. Re-ran the loop until it came back clean twice.
+
+
+========================================================================
+2) NEW POST — the red-team loop update
+========================================================================
+
+An update on the red-team loop from my last post.
+
+I turned it from a one-off script into a real harness I run with one command against the whole stack. It attacks the backend, replays out-of-order Stripe events to prove a cancelled plan can't come back, and it screenshots the site and fails if the page renders as a flat white frame. That last one is a real bug I hit: the old checks passed because there were no console errors, but the entire hero was painting white on certain GPUs.
+
+I also added a tripwire that fails the build if I ever delete something already built and verified, or reintroduce a mistake I already fixed. Iterating on a live 3D site, the hard part is not breaking the thing that already worked.
+
+It runs in CI now, so every push gets checked.
+
+Live: xkaii.studio
+Security: xkaii.studio/security
+
+
+========================================================================
+3) CASE STUDY
+========================================================================
+
+How I red-team my own sites
+
+Looking expensive is only half the job. The sites I build are real-time 3D, hand-written WebGL and GLSL, but behind them are real systems: multi-tenant SaaS, Stripe billing, PostgreSQL row-level security. So I don't ship on "it looks done." I attack it first.
+
+I wrote an automated red-team loop in Python. It has two legs. A static leg reads every changed file line by line against a security, resource, correctness and billing checklist, then re-reviews the previous round's fixes, because fixes have their own bugs. A runtime leg actually hits the running system with adversarial inputs. One command runs all of it and prints one verdict, and it runs in CI on every push.
+
+Run against my own stack, it flagged mostly hardening, but the kind that bites you in prod:
+
+- Server-side SSRF with a DNS-rebinding window that could reach cloud metadata, including the CGNAT range Python's ipaddress module doesn't flag as private. Fixed by pinning the resolved IP.
+- A Postgres RLS trigger that guarded the privileged columns on UPDATE but not INSERT, so a fresh row could be self-inserted at the paid tier. One line to also fire it on insert.
+- Stripe webhook ordering, where a reordered or duplicate event could re-grant a cancelled plan. Fixed with a per-row high-water mark.
+- A temp-dir leak and a body-size cap a chunked upload slipped past.
+
+Then I closed the two gaps the loop itself had. The billing logic was only ever read, so now a test replays reordered and duplicate Stripe events and asserts the final plan. And a frontend check went green while the page rendered solid white, because it only watched console errors, so now a screenshot detector fails if the frame is one flat color. I also added a tripwire that fails the build if I ever delete something already verified or reintroduce a bug I already fixed.
+
+It found the gaps, I fixed them, and it came back clean twice.
+
+If you want a site that looks like a high-budget trailer and holds up when someone probes it, that is what I build.
+
+Live: xkaii.studio
+Security: xkaii.studio/security
