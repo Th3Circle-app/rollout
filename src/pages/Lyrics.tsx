@@ -23,7 +23,7 @@ import FontSelect from "@/components/FontSelect";
 type Word = { word: string; start: number; end: number; conf?: number };
 
 export default function App() {
-  const { release, session, go, setRelease } = useStore();
+  const { release, session, go, setRelease, plan, openUpgrade } = useStore();
   const r = release ?? {
     filename: "Afterglow Nova.wav",
     title: "Afterglow",
@@ -195,51 +195,76 @@ export default function App() {
   const dropWord = (i: number) => setWords((ws) => ws.filter((_, j) => j !== i));
 
   // 3 · render with the exact approved words
+  // Batch size by plan — people post 3-4x/day, so give them a set to work with.
+  const BATCH_BY_PLAN: Record<string, number> = { free: 3, artist: 4, studio: 6 };
+  const batchCount = BATCH_BY_PLAN[plan] ?? 3;
+  // Visual variations so a batch is distinct posts, not copies of one clip.
+  const VARIATIONS: { font: string; bg: "cover" | "broll"; position: "center" | "top" | "bottom" }[] = [
+    { font: "anton", bg: "cover", position: "center" },
+    { font: "bold", bg: "broll", position: "bottom" },
+    { font: "anton", bg: "broll", position: "center" },
+    { font: "bold", bg: "cover", position: "top" },
+    { font: "anton", bg: "broll", position: "bottom" },
+    { font: "bold", bg: "cover", position: "center" },
+  ];
+  const [batchTotal, setBatchTotal] = useState(0);
+  const [batchDone, setBatchDone] = useState(0);
+
+  async function renderOne(v: { font: string; bg: "cover" | "broll"; position: string }) {
+    const fd = new FormData();
+    fd.append("lyrics", lyrics);
+    fd.append("title", r.title);
+    fd.append("artist", r.artist);
+    fd.append("cover_url", r.coverUrl || "");
+    if (words.length) fd.append("words_json", JSON.stringify(words));
+    fd.append("bg", v.bg);
+    fd.append("moods", (r.moods || []).join(","));
+    try { fd.append("style", localStorage.getItem("rollout_style") || "auto"); } catch { /* ignore */ }
+    fd.append("font", v.font);
+    fd.append("position", v.position);
+    fd.append("start", String(sectionStart ?? -1));
+    if (audioFile) fd.append("file", audioFile);
+    else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
+    const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
+    if (res.status === 409) throw new Error("The engine is finishing another render — wait a moment and try again.");
+    if (!res.ok) throw new Error("Render failed");
+    const blob = await res.blob();
+    if (!videoUrl) setVideoUrl(URL.createObjectURL(blob)); // preview the first one
+    await saveVideo({
+      id: `v_${Date.now()}_${Math.round(performance.now() * 1000)}`,
+      song: slug,
+      label: `${r.title} · ${v.bg === "broll" ? "b-roll" : "cover"}`,
+      bg: v.bg,
+      createdAt: Date.now(),
+      blob,
+    });
+    reloadSaved();
+  }
+
+  // Generate a whole batch (count by plan). Renders run one at a time because the
+  // engine serializes heavy jobs; each finished clip drops into the library below.
   const render = async () => {
-    if (!hasAudio || (!lyrics.trim() && !words.length)) return;
+    if (!hasAudio || (!lyrics.trim() && !words.length) || status === "rendering") return;
     setStatus("rendering");
     setErr("");
-    try {
-      const fd = new FormData();
-      fd.append("lyrics", lyrics);
-      fd.append("title", r.title);
-      fd.append("artist", r.artist);
-      fd.append("cover_url", r.coverUrl || "");
-      if (words.length) fd.append("words_json", JSON.stringify(words));
-      fd.append("bg", bg);
-      fd.append("moods", (r.moods || []).join(","));
-      try { fd.append("style", localStorage.getItem("rollout_style") || "auto"); } catch { /* ignore */ }
-      fd.append("font", font);
-      fd.append("position", position);
-      fd.append("start", String(sectionStart ?? -1));
-      if (audioFile) fd.append("file", audioFile);
-      else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
-      const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
-      if (res.status === 409) throw new Error("The engine is finishing another render — wait a moment and try again.");
-      if (!res.ok) throw new Error("Render failed");
-      const blob = await res.blob();
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-      setVideoUrl(URL.createObjectURL(blob));
-      setStatus("done");
-      // Keep it forever (in the browser) so leaving the page never loses it.
+    setBatchTotal(batchCount);
+    setBatchDone(0);
+    // The artist's own style pick leads the batch; the rest add variety.
+    const userPick = { font, bg, position: position === "random" ? "center" : position };
+    const combos = [userPick, ...VARIATIONS];
+    let made = 0;
+    for (let i = 0; i < batchCount; i++) {
       try {
-        await saveVideo({
-          id: `v_${Date.now()}`,
-          song: slug,
-          label: `${r.title} · ${bg === "broll" ? "b-roll" : "cover"}`,
-          bg,
-          createdAt: Date.now(),
-          blob,
-        });
-        reloadSaved();
-      } catch { /* saving is best-effort */ }
-      // Mark the release's lyric-video step complete so the Dashboard chip
-      // flips from orange to green (persists via the store's release upsert).
-      if (release && !release.lyricVideoDone) setRelease({ ...release, lyricVideoDone: true });
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Render failed — is the engine running?");
-      setStatus("error");
+        await renderOne(combos[i % combos.length]);
+        made += 1;
+        setBatchDone(made);
+      } catch (e) {
+        if (i === 0) setErr(e instanceof Error ? e.message : "Render failed");
+        // a mid-batch failure (e.g. busy) shouldn't kill the rest of the batch
+      }
     }
+    setStatus(made > 0 ? "done" : "error");
+    if (made > 0 && release && !release.lyricVideoDone) setRelease({ ...release, lyricVideoDone: true });
   };
 
   const download = () => {
@@ -491,22 +516,22 @@ export default function App() {
                 className="rounded-xl text-white gap-2 w-full py-6 font-semibold disabled:opacity-40"
               >
                 {status === "rendering"
-                  ? (<><Loader2 className="size-4 animate-spin" />Rendering with your exact words…</>)
-                  : (<><Clapperboard className="size-4" />3 · Generate 15s lyric video</>)}
+                  ? (<><Loader2 className="size-4 animate-spin" />Rendering {Math.min(batchDone + 1, batchTotal)} of {batchTotal}…</>)
+                  : (<><Clapperboard className="size-4" />Generate {batchCount} lyric videos</>)}
               </Button>
               {status === "rendering" && (
                 <div className="flex flex-col gap-2">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-[#1E1E28]">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-[width] duration-500 ease-out"
-                      style={{ width: `${Math.round(rprog)}%` }}
+                      style={{ width: `${Math.round(((batchDone + rprog / 100) / Math.max(1, batchTotal)) * 100)}%` }}
                     />
                   </div>
                   <div className="flex justify-between font-mono text-[10px] text-[#5E5A72]">
-                    <span>{rstage || "Working"}…</span>
-                    <span>{Math.round(rprog)}%</span>
+                    <span>{rstage || "Working"}… ({batchDone}/{batchTotal} done)</span>
+                    <span>{Math.round(((batchDone + rprog / 100) / Math.max(1, batchTotal)) * 100)}%</span>
                   </div>
-                  <span className="font-mono text-[10px] text-[#5E5A72]">A 15s clip takes about a minute (longer on the first render while the engine warms up).</span>
+                  <span className="font-mono text-[10px] text-[#5E5A72]">Each clip takes about a minute and they render one at a time — finished ones drop into your library below as they go.</span>
                 </div>
               )}
               {err && <div className="text-sm text-red-400">{err}</div>}
