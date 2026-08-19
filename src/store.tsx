@@ -320,11 +320,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const prevUid = localStorage.getItem(ACTIVE_UID_KEY);
           if (prevUid && prevUid !== uid) switched = true;
         } catch { /* ignore */ }
-        if (!switched && release?.id) {
-          const { data: owned } = await supabase
-            .from("rollout_releases").select("id")
-            .eq("id", release.id).eq("artist_id", uid).maybeSingle();
-          if (!owned) switched = true; // foreign release cached locally → drop it
+        if (!switched && release) {
+          // Any locally-cached release that isn't backed by a cloud row for THIS
+          // account is stale (deleted, or from another account) → drop it so a
+          // wiped/empty account never shows leftover content.
+          let owned = false;
+          if (release.id) {
+            const { data } = await supabase
+              .from("rollout_releases").select("id")
+              .eq("id", release.id).eq("artist_id", uid).maybeSingle();
+            owned = Boolean(data);
+          }
+          if (!owned) switched = true;
         }
         if (switched) {
           resetLocalWorkspace();

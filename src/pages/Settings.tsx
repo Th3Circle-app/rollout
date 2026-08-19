@@ -42,6 +42,19 @@ const IMG_PROVIDERS = [
   { key: "custom", label: "Custom endpoint", group: "paid", hint: "any OpenAI-compatible image API" },
 ];
 
+// Short "how to get your key" tutorial per provider — a link + numbered steps.
+const KEY_GUIDES: Record<string, { url: string; steps: string[] }> = {
+  aihorde: { url: "https://aihorde.net/register", steps: ["Open aihorde.net/register", "Sign up (free, no card)", "Copy your API key"] },
+  gemini: { url: "https://aistudio.google.com/apikey", steps: ["Open aistudio.google.com/apikey", "Sign in with Google", "Click “Create API key” and copy it"] },
+  huggingface: { url: "https://huggingface.co/settings/tokens", steps: ["Open huggingface.co/settings/tokens", "New token → Read access", "Copy the token"] },
+  cloudflare: { url: "https://dash.cloudflare.com/profile/api-tokens", steps: ["In dash.cloudflare.com, copy your Account ID (right sidebar)", "Profile → API Tokens → Create Token → Workers AI", "Paste the token + Account ID below"] },
+  together: { url: "https://api.together.ai/settings/api-keys", steps: ["Open api.together.ai and sign up (free FLUX included)", "Settings → API Keys", "Copy your key"] },
+  replicate: { url: "https://replicate.com/account/api-tokens", steps: ["Open replicate.com/account/api-tokens", "Copy your API token"] },
+  stability: { url: "https://platform.stability.ai/account/keys", steps: ["Open platform.stability.ai", "Account → API Keys", "Copy your key"] },
+  openai: { url: "https://platform.openai.com/api-keys", steps: ["Open platform.openai.com/api-keys", "Create new secret key", "Copy it"] },
+  custom: { url: "", steps: ["Use any OpenAI-compatible image API", "Paste its API key and base URL below"] },
+};
+
 export type ImgConn = { provider: string; key: string; model: string; base_url: string };
 
 export function loadImgConn(): ImgConn {
@@ -62,6 +75,19 @@ export default function App() {
   const initials = (release?.artist || "R").slice(0, 2).toUpperCase();
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarErr, setAvatarErr] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Self-service account deletion: wipe content + auth identity via the RPC,
+  // then sign out and drop to the landing with a clean local slate.
+  const deleteAccount = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    if (!supabase) return;
+    setDeleting(true);
+    try { await supabase.rpc("rollout_delete_account"); } catch { /* still sign out below */ }
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    try { localStorage.clear(); } catch { /* ignore */ }
+    window.location.href = "/";
+  };
   const pickAvatar = async (file: File) => {
     if (!supabase || !session) return;
     if (!file.type.startsWith("image/")) { setAvatarErr("Please choose an image file."); return; }
@@ -350,24 +376,9 @@ export default function App() {
             </span>
             <span className="font-mono text-[11px] text-[#5E5A72]">your key · your account · never stored</span>
           </div>
-          <div className="-mt-2 flex flex-col gap-2">
-            <p className="text-[#9A96AD] text-sm leading-5">
-              The built-in generator is free but shared, so it can queue at peak times. Add your own key for
-              <span className="text-[#F2F0F7]"> instant, unlimited covers</span>. It stays on your device, never leaves it,
-              and the built-in covers you if a provider ever drops.
-            </p>
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-2.5">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-violet-300">Free options</span>
-              <p className="mt-0.5 text-[13px] text-[#9A96AD]">
-                <span className="text-[#F2F0F7]">Cloudflare</span> (10,000 images/day), <span className="text-[#F2F0F7]">Together AI</span> (free FLUX),
-                or <span className="text-[#F2F0F7]">Google Gemini</span> — grab a key in about two minutes.
-              </p>
-            </div>
-            <p className="font-mono text-[11px] leading-4 text-[#5E5A72]">
-              Roadmap: as Rollout grows we'll add a dedicated built-in generator with generous included limits,
-              so bringing your own key becomes optional, not needed.
-            </p>
-          </div>
+          <p className="-mt-2 text-[#9A96AD] text-sm leading-6">
+            The built-in generator is free. Add your own key for instant, unlimited covers — it stays on your device and is never stored.
+          </p>
           {(["free", "paid"] as const).map((grp) => (
             <div key={grp} className="flex flex-col gap-2">
               <span className="font-mono text-[10px] uppercase tracking-wider text-[#5E5A72]">
@@ -391,14 +402,28 @@ export default function App() {
               </div>
             </div>
           ))}
-          {(() => {
-            const cur = IMG_PROVIDERS.find((p) => p.key === conn.provider);
-            return cur?.hint ? (
-              <p className="font-mono text-[11px] text-[#5E5A72] -mt-1">→ {cur.hint}</p>
-            ) : null;
-          })()}
           {conn.provider !== "builtin" && (
             <div className="flex flex-col gap-2.5">
+              {KEY_GUIDES[conn.provider] && (
+                <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-[#F2F0F7]">How to get your key</span>
+                    {KEY_GUIDES[conn.provider].url && (
+                      <a href={KEY_GUIDES[conn.provider].url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[12px] font-medium text-violet-300 hover:text-violet-200">
+                        Open <ExternalLink className="size-3" />
+                      </a>
+                    )}
+                  </div>
+                  <ol className="mt-2 flex flex-col gap-1.5">
+                    {KEY_GUIDES[conn.provider].steps.map((s, i) => (
+                      <li key={i} className="flex gap-2.5 text-[12px] leading-5 text-[#9A96AD]">
+                        <span className="font-mono text-[11px] text-violet-300">{i + 1}.</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
               <input
                 type="password"
                 value={conn.key}
@@ -426,19 +451,9 @@ export default function App() {
                 Custom endpoint = any OpenAI-compatible image API (OpenArt, Higgsfield API access, gateways).
               </p>
 
-              {/* trust: exactly how the key is handled — all verifiably true */}
-              <div className="flex items-start gap-3 rounded-xl border border-[#46E0A8]/20 bg-[#46E0A8]/[0.04] px-3.5 py-3">
-                <ShieldCheck className="size-4 shrink-0 mt-0.5 text-[#46E0A8]" />
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-[13px] font-semibold text-[#F2F0F7]">Your key stays yours — here's exactly how.</span>
-                  <ul className="flex flex-col gap-1 text-[12px] leading-5 text-[#9A96AD]">
-                    <li>• Saved <span className="text-[#F2F0F7]">only in this browser</span>, never written to our database or servers.</li>
-                    <li>• When you generate, it's sent over <span className="text-[#F2F0F7]">HTTPS</span> to our generator, used once to call your provider on your behalf, then discarded — <span className="text-[#F2F0F7]">never logged or stored</span> on our side.</li>
-                    <li>• It's your account and your usage, so <span className="text-[#F2F0F7]">you can set spend caps</span> on the provider's dashboard.</li>
-                    <li>• Remove it anytime by switching back to <span className="text-[#F2F0F7]">Built-in</span>.</li>
-                  </ul>
-                  <span className="font-mono text-[10px] text-[#5E5A72]">Tip: create a separate, restricted key for Rollout so you can revoke it independently.</span>
-                </div>
+              <div className="flex items-start gap-2.5 rounded-xl border border-[#46E0A8]/20 bg-[#46E0A8]/[0.04] px-3.5 py-2.5">
+                <ShieldCheck className="size-4 shrink-0 text-[#46E0A8]" />
+                <span className="text-[12px] leading-5 text-[#9A96AD]">Saved only in this browser and used once per generation to call your provider. Never logged or stored on our side.</span>
               </div>
             </div>
           )}
@@ -458,14 +473,39 @@ export default function App() {
 
         {/* account */}
         {cloud && session && (
-          <div className="panel rounded-3xl p-6 flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Account</span>
-              <span className="font-mono text-[#5E5A72] text-xs leading-4">{session.user.email}</span>
+          <div className="panel rounded-3xl p-6 flex flex-col gap-5">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-1">
+                <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Account</span>
+                <span className="font-mono text-[#5E5A72] text-xs leading-4">{session.user.email}</span>
+              </div>
+              <Button variant="ghost" onClick={signOut} className="border border-white/8 text-[#9A96AD] hover:text-[#F2F0F7] rounded-xl">
+                Sign out
+              </Button>
             </div>
-            <Button variant="ghost" onClick={signOut} className="border border-white/8 text-[#9A96AD] hover:text-[#F2F0F7] rounded-xl">
-              Sign out
-            </Button>
+            <div className="flex items-center justify-between gap-4 border-t border-white/8 pt-5">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm text-[#F2F0F7]">Delete account</span>
+                <span className="font-mono text-[11px] text-[#5E5A72]">
+                  {confirmDelete
+                    ? "This permanently deletes your account and all content. This can't be undone."
+                    : "Permanently remove your account and everything in it."}
+                </span>
+              </div>
+              <button
+                onClick={deleteAccount}
+                onMouseLeave={() => !deleting && setConfirmDelete(false)}
+                disabled={deleting}
+                className={
+                  "shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors " +
+                  (confirmDelete
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "border border-red-500/40 text-red-400 hover:bg-red-500/10")
+                }
+              >
+                {deleting ? <Loader2 className="size-4 animate-spin" /> : confirmDelete ? "Yes, delete forever" : "Delete account"}
+              </button>
+            </div>
           </div>
         )}
 
