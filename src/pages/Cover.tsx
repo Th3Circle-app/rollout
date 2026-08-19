@@ -491,7 +491,14 @@ export default function App() {
     setLayers((L) => ({ ...L, [key]: { ...L[key], ...p } }));
 
   const regenerate = () => {
-    if (plan === "free") {
+    // Meter only OUR generators (free built-in + our paid platform key). An
+    // artist generating through their OWN connected key pays their provider, so
+    // they're never capped. When the free allowance runs out the upgrade modal
+    // offers both paths: subscribe, or add your own key (see UpgradeModal).
+    const conn = loadImgConn();
+    const cat = catalog.find((m) => m.id === pick);
+    const usingBYO = conn.provider !== "builtin" && !(cat && cat.available && cat.provider === "platform");
+    if (plan === "free" && !usingBYO) {
       if (gensUsed >= FREE_COVER_GENS) {
         openUpgrade("Unlimited AI covers");
         return;

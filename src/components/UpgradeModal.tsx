@@ -44,7 +44,7 @@ export const TIERS: {
 ];
 
 export default function UpgradeModal() {
-  const { upgrade, closeUpgrade, setPlan, plan, session, refreshPlan } = useStore();
+  const { upgrade, closeUpgrade, setPlan, plan, session, refreshPlan, go } = useStore();
   const [interval, setInterval] = useState<"month" | "year">("month");
   const [waiting, setWaiting] = useState(false);
   const [needsAuth, setNeedsAuth] = useState(false);
@@ -93,6 +93,17 @@ export default function UpgradeModal() {
         <p className="mt-2 text-sm text-[#9A96AD]">
           Your free song showed you what Rollout hears. Pick how far you want to take the next one.
         </p>
+
+        {/* BYO escape hatch — for AI-cover limits, upgrading isn't the only path:
+            an artist can connect their own image key and keep generating free. */}
+        {/cover|ai|image|fast/i.test(upgrade.feature) && (
+          <button
+            onClick={() => { closeUpgrade(); go("Settings"); }}
+            className="mt-3 text-xs text-violet-300 underline underline-offset-2 hover:text-violet-200"
+          >
+            Or add your own AI image key in Settings and keep generating for free →
+          </button>
+        )}
 
         {/* $7 / 7-day trial — the no-brainer front door for new artists */}
         {plan === "free" && (
