@@ -87,6 +87,18 @@ class _AuthGate(BaseHTTPMiddleware):
 app.add_middleware(_AuthGate)
 
 
+# Log the exact field that fails request validation (the 422 that never reaches an
+# endpoint body). Temporary diagnostic — surfaces which Form field the browser sent
+# in a shape FastAPI rejects.
+from fastapi.exceptions import RequestValidationError as _RVE
+
+
+@app.exception_handler(_RVE)
+async def _log_validation(request, exc):
+    print("VALIDATION 422", request.url.path, "->", exc.errors(), flush=True)
+    return Response(status_code=422, content=str(exc.errors())[:500].encode(), media_type="text/plain")
+
+
 # ── one heavy job at a time ─────────────────────────────────────────────────
 # The engine is a small shared-CPU box: a single Demucs / Whisper / ffmpeg job
 # already pins both cores, so two heavy jobs at once thrash and crawl (a promo
@@ -571,7 +583,7 @@ def captions(req: CaptionReq):
 @app.post("/lyricvideo")
 @single_flight
 def lyric_video(
-    lyrics: str = Form(...),
+    lyrics: str = Form(""),   # optional: the detected words alone are enough
     title: str = Form(""),
     artist: str = Form(""),
     cover_url: str = Form(""),
@@ -626,6 +638,17 @@ def lyric_video(
         except Exception:
             words_override = None
 
+    # The artist can render from just the detected words (no pasted lyrics). If
+    # lyrics is empty, rebuild the text from the words so the classic renderer
+    # (which reads the lyrics string) still has something to show.
+    if not lyrics.strip() and words_override:
+        try:
+            lyrics = " ".join(str(w.get("word", "")).strip() for w in words_override if w.get("word"))
+        except Exception:
+            pass
+    if not lyrics.strip() and not words_override:
+        return Response(status_code=400, content=b"provide lyrics or detect the words first", media_type="text/plain")
+
     out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
     try:
         # The premium engine needs Remotion (Node), which is NOT bundled in this
@@ -657,6 +680,9 @@ def lyric_video(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
+        import traceback
+        print("RENDER FAILED:", repr(e))
+        traceback.print_exc()
         return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
     finally:
         for p in ([out] + ([audio_path] if audio_is_temp else [])):
@@ -736,6 +762,9 @@ def promo_clip(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
+        import traceback
+        print("RENDER FAILED:", repr(e))
+        traceback.print_exc()
         return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
     finally:
         for p in ([out] + ([audio_path] if audio_is_temp else [])):
