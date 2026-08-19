@@ -320,22 +320,40 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
     }
 
 
-def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="bold", position="center", start_override=None):
+def _word_slots(words_override, offset=0.0, per_line=4):
+    """Build (chunks, slot_times) from the DETECTED words so text lands on the
+    actual sung timing instead of a beat grid. `offset` nudges every line earlier
+    (negative) or later (positive) in seconds — the artist's manual sync control.
+    Returns (None, None) when there are no usable words (pasted-lyrics-only path)."""
+    ws = [w for w in (words_override or [])
+          if isinstance(w, dict) and str(w.get("word", "")).strip()]
+    if len(ws) < 2:
+        return None, None
+    chunks, slots = [], []
+    for i in range(0, len(ws), per_line):
+        grp = ws[i:i + per_line]
+        chunks.append(" ".join(str(w["word"]).strip() for w in grp))
+        slots.append(max(0.0, float(grp[0].get("start", 0) or 0) + offset))
+    return chunks, slots
+
+
+def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="bold", position="center", start_override=None, words_override=None, offset=0.0):
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
     start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
 
-    # beat grid inside the clip
-    tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
-    beats = list(librosa.frames_to_time(beat_frames, sr=sr))
-    if len(beats) < 4:  # fallback: even grid at ~2 chunks/sec
-        beats = list(np.arange(0, CLIP_SEC, 0.75))
-    # advance text every 2 beats so words are readable
-    slots = beats[::2]
-    if not slots or slots[0] > 0.4:
-        slots = [0.0] + slots
-
-    chunks = chunk_lyrics(lyrics, len(slots))
+    # Prefer the detected word timing (exact) over a beat grid so text lands when
+    # it's actually sung; fall back to the beat grid for pasted-lyrics-only.
+    chunks, slots = _word_slots(words_override, offset)
+    if chunks is None:
+        tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
+        beats = list(librosa.frames_to_time(beat_frames, sr=sr))
+        if len(beats) < 4:  # fallback: even grid at ~2 chunks/sec
+            beats = list(np.arange(0, CLIP_SEC, 0.75))
+        slots = beats[::2]  # advance text every 2 beats so words are readable
+        if not slots or slots[0] > 0.4:
+            slots = [0.0] + slots
+        chunks = chunk_lyrics(lyrics, len(slots))
     artist_tag = f"{title.upper()} — {artist.upper()}" if artist else title.upper()
     import random as _rnd
     rng = _rnd.Random()  # fresh so "random" placement varies each render
@@ -437,21 +455,25 @@ def _broll_bg_video(style, moods, tmpdir):
     return bgv
 
 
-def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=None, style="", font="bold", position="center", start_override=None):
-    """Same beat-synced kinetic type as the classic renderer, but over MOVING
-    vibe-matched stock footage instead of the static cover. ffmpeg overlays the
-    transparent text frames (+ a readability scrim) onto the b-roll video."""
+def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=None, style="", font="bold", position="center", start_override=None, words_override=None, offset=0.0):
+    """Same kinetic type as the classic renderer, but over MOVING vibe-matched
+    stock footage instead of the static cover. ffmpeg overlays the transparent
+    text frames (+ a readability scrim) onto the b-roll video."""
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
     start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
-    tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
-    beats = list(librosa.frames_to_time(beat_frames, sr=sr))
-    if len(beats) < 4:
-        beats = list(np.arange(0, CLIP_SEC, 0.75))
-    slots = beats[::2]
-    if not slots or slots[0] > 0.4:
-        slots = [0.0] + slots
-    chunks = chunk_lyrics(lyrics, len(slots))
+    # Detected word timing (exact) with a beat-grid fallback — matches the cover
+    # renderer so text lands when it's actually sung.
+    chunks, slots = _word_slots(words_override, offset)
+    if chunks is None:
+        tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
+        beats = list(librosa.frames_to_time(beat_frames, sr=sr))
+        if len(beats) < 4:
+            beats = list(np.arange(0, CLIP_SEC, 0.75))
+        slots = beats[::2]
+        if not slots or slots[0] > 0.4:
+            slots = [0.0] + slots
+        chunks = chunk_lyrics(lyrics, len(slots))
     artist_tag = f"{title.upper()} — {artist.upper()}" if artist else title.upper()
     import random as _rnd
     rng = _rnd.Random()  # fresh so "random" placement varies each render

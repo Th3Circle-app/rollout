@@ -597,6 +597,7 @@ def lyric_video(
     position: str = Form("center"),
     start: float = Form(-1),   # artist-chosen section start (sec); < 0 = auto hook
     duration: float = Form(15),  # clip length; 25 is a Studio-tier upgrade, else 15
+    offset: float = Form(0),   # manual timing nudge (sec) for the lyric sync
     file: UploadFile | None = File(None),
     authorization: str = Header(default=""),
 ):
@@ -674,17 +675,17 @@ def lyric_video(
                     bg=bg, moods=_moods, style=style, start_override=(start if start >= 0 else None))
             except Exception as e:
                 print("premium engine fell back:", e)
-                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None))
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
         elif bg == "broll":
             # Moving vibe-matched footage background via the ffmpeg renderer. Any
             # failure (no clips, ffmpeg error) safely falls back to the cover render.
             try:
-                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position, start_override=(start if start >= 0 else None))
+                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
             except Exception as e:
                 print("b-roll fell back to cover:", e)
-                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None))
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
         else:
-            meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
+            meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:

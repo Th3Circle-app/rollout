@@ -51,6 +51,7 @@ export default function App() {
   const [font, setFont] = useState<string>("anton");
   const [position, setPosition] = useState<"center" | "top" | "bottom" | "random">("center");
   const [duration, setDuration] = useState<15 | 25>(15); // 25s is a Studio-tier upgrade
+  const [offset, setOffset] = useState(0); // manual lyric-timing nudge (seconds)
   useEffect(() => {
     fetch(`${API}/health`).then((r) => r.json())
       .then((j) => setBrollUp(Boolean(j.broll))).catch(() => setBrollUp(false));
@@ -225,6 +226,7 @@ export default function App() {
     fd.append("position", v.position);
     fd.append("start", String(sectionStart ?? -1));
     fd.append("duration", String(duration));
+    fd.append("offset", String(offset));
     if (audioFile) fd.append("file", audioFile);
     else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
     const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
@@ -509,6 +511,22 @@ export default function App() {
                     {l}
                   </button>
                 ))}
+              </div>
+
+              {/* lyric sync nudge — failsafe if words land a touch early or late */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="section-label">Lyric timing</span>
+                  <span className="font-mono text-[10px] text-[#9A96AD]">
+                    {offset === 0 ? "on the beat" : `${offset > 0 ? "+" : ""}${offset.toFixed(1)}s ${offset < 0 ? "earlier" : "later"}`}
+                  </span>
+                </div>
+                <input
+                  type="range" min={-1} max={1} step={0.1} value={offset}
+                  onChange={(e) => setOffset(parseFloat(e.target.value))}
+                  className="w-full accent-violet-500"
+                />
+                <span className="font-mono text-[10px] text-[#5E5A72]">If the words land a touch early or late, nudge and re-generate.</span>
               </div>
 
               {/* clip length — 25s is a Studio ($29) upgrade */}
