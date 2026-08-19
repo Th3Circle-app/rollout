@@ -5,7 +5,7 @@ import { useStore, checkoutUrl, trialUrl, TRIAL_PRICE, TRIAL_DAYS } from "@/stor
 import { cloudEnabled } from "@/lib/supabase";
 
 // Two paid tiers. Artist = release properly. Studio = market like a machine.
-const TIERS: {
+export const TIERS: {
   id: "artist" | "studio";
   name: string;
   month: number;

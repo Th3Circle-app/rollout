@@ -6,11 +6,14 @@ import Cover from "./pages/Cover";
 import Distribute from "./pages/Distribute";
 import Plan from "./pages/Plan";
 import Lyrics from "./pages/Lyrics";
+import Promo from "./pages/Promo";
 import Landing from "./pages/Landing";
 import Ads from "./pages/Ads";
 import Ship from "./pages/Ship";
 import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
+import Admin from "./pages/Admin";
+import Pricing from "./pages/Pricing";
 import { useEffect, useState } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
@@ -51,11 +54,14 @@ const TITLES: Record<string, string> = {
   Distribute: "Distribution",
   Plan: "Release Plan",
   Lyrics: "Lyric Video",
+  Promo: "Promo Clips",
   Landing: "Fan Page",
   Ads: "Ad Center",
   Ship: "Launch",
   Rewards: "Rewards",
   Settings: "Settings",
+  Admin: "Metrics",
+  Pricing: "Plans & Pricing",
 };
 
 // IA per the Flowstep originals: Import / Releases (hub) / Assets / Settings.
@@ -69,11 +75,14 @@ const PAGES: Record<string, React.ComponentType> = {
   Distribute,
   Plan,
   Lyrics,
+  Promo,
   Landing,
   Ads,
   Ship,
   Rewards,
   Settings,
+  Admin,
+  Pricing,
 };
 
 function Shell() {

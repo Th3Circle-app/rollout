@@ -136,6 +136,7 @@ type Store = {
   signOut: () => void;
   avatarUrl: string;
   updateAvatar: (url: string) => Promise<void>;
+  isAdmin: boolean;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -182,7 +183,7 @@ function loadSongs(): string[] {
 
 const PAGE_NAMES = [
   "Import", "Build", "Dashboard", "Library", "Cover", "Distribute", "Plan",
-  "Lyrics", "Landing", "Ads", "Ship", "Rewards", "Settings",
+  "Lyrics", "Promo", "Landing", "Ads", "Ship", "Rewards", "Settings", "Admin", "Pricing",
 ];
 
 function initialPage(): string {
@@ -284,6 +285,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ── cloud session + profile + release sync (no-op in local mode) ────────
   const [session, setSession] = useState<Session | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const sessionRef = useRef<Session | null>(null);
   // Which uid we've already run the workspace-isolation check for, so it fires
   // once per account per load — not on every token refresh (which would risk
@@ -331,6 +333,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setStreamingLinkState("");
           setSongs([]);
           setAvatarUrl("");
+          setIsAdmin(false);
         }
         try { localStorage.setItem(ACTIVE_UID_KEY, uid); } catch { /* ignore */ }
         verifiedUidRef.current = uid;
@@ -341,11 +344,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         { id: uid, email: session.user.email || "", artist_name: meta.artist_name || "" },
         { onConflict: "id", ignoreDuplicates: false }
       );
-      const { data: prof } = await supabase.from("rollout_artists").select("plan,songs_used,avatar_url").eq("id", uid).single();
+      const { data: prof } = await supabase.from("rollout_artists").select("plan,songs_used,avatar_url,is_admin").eq("id", uid).single();
       if (prof) {
         setPlanState(prof.plan as Plan);
         setSongs((old) => (old.length >= prof.songs_used ? old : Array.from({ length: prof.songs_used }, (_, i) => old[i] ?? `cloud-${i}`)));
         setAvatarUrl((prof as { avatar_url?: string }).avatar_url || "");
+        setIsAdmin(Boolean((prof as { is_admin?: boolean }).is_admin));
       }
       // hydrate the most recent release if local is empty (or was just wiped)
       if (switched || !release) {
@@ -455,6 +459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         signOut,
         avatarUrl,
         updateAvatar,
+        isAdmin,
       }}
     >
       {children}

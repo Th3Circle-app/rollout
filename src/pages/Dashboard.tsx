@@ -40,6 +40,7 @@ export default function App() {
   }[] = [
     { label: "Cover Art", page: "Cover", ready: Boolean(r.coverUrl), img: r.coverUrl, ai: true },
     { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, readyLabel: lyricVideoDone ? "Ready" : r.lyrics ? "Make video" : "Needs lyrics", ai: true },
+    { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: false, readyLabel: "Make a clip", ai: true },
     { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), readyLabel: releaseDate ? "Ready" : "Set a date" },
     { label: "Distribution", page: "Distribute", ready: submitted, readyLabel: submitted ? "Submitted" : "Needs review" },
     { label: "Release Page", page: "Landing", ready: pageReady, readyLabel: pageReady ? "Ready" : "Needs review", wide: true },

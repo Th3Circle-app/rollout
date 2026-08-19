@@ -48,6 +48,13 @@ const fullPrompt = (direction: string, keywords: string[], moods: string[]) => {
 const BLENDS: BlendMode[] = ["overlay", "multiply", "screen", "soft-light", "color"];
 export default function App() {
   const { release, setRelease, go, plan, openUpgrade } = useStore();
+  // Free tier gets a real run of AI cover generations before the upsell — the
+  // built-in generator is $0/keyless, so this is a funnel, not a cost gate.
+  const FREE_COVER_GENS = 10;
+  const [gensUsed, setGensUsed] = useState<number>(() => {
+    try { return Number(localStorage.getItem("rollout_covergens") || "0"); } catch { return 0; }
+  });
+  const gensLeft = Math.max(0, FREE_COVER_GENS - gensUsed);
 
   // Fall back to Afterglow so the screen still demos if opened directly.
   const r = release ?? {
@@ -463,8 +470,13 @@ export default function App() {
 
   const regenerate = () => {
     if (plan === "free") {
-      openUpgrade("Unlimited AI covers");
-      return;
+      if (gensUsed >= FREE_COVER_GENS) {
+        openUpgrade("Unlimited AI covers");
+        return;
+      }
+      const next = gensUsed + 1;
+      setGensUsed(next);
+      try { localStorage.setItem("rollout_covergens", String(next)); } catch { /* ignore */ }
     }
     setLoaded({});
     setFailed({});
@@ -691,11 +703,15 @@ export default function App() {
                 </button>
               ))}
               <Button onClick={regenerate} variant="ghost" className="border border-white/10 text-[#9A96AD] gap-1.5 text-xs h-9">
-                {plan !== "free" ? <RefreshCw className="size-3.5" /> : <Lock className="size-3.5" />}
-                New set
+                {plan !== "free" ? <RefreshCw className="size-3.5" /> : gensLeft > 0 ? <RefreshCw className="size-3.5" /> : <Lock className="size-3.5" />}
+                {plan !== "free" ? "New set" : gensLeft > 0 ? `New set · ${gensLeft} free left` : "New set"}
               </Button>
               <p className="text-[10px] leading-tight text-[#5E5A72]">
-                Using the free shared generator.{" "}
+                {plan !== "free"
+                  ? "Unlimited AI covers on your plan."
+                  : gensLeft > 0
+                  ? `${gensLeft} of ${FREE_COVER_GENS} free generations left. `
+                  : "You've used your free generations. "}
                 <button onClick={() => go("Settings")} className="text-violet-400 hover:underline">
                   Add your own free key
                 </button>{" "}

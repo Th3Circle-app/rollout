@@ -510,3 +510,87 @@ def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=No
     finally:
         import shutil as _sh
         _sh.rmtree(tmpdir, ignore_errors=True)
+
+
+def make_promo_clip(audio_path, title, artist, caption, out_path,
+                    cover="", moods=None, style="", font="bold", bg="broll"):
+    """A shareable vertical promo teaser (TikTok/Reels/Shorts): the song's hook
+    over vibe-matched b-roll (or a slow push on the cover), with a punchy
+    headline sequence — title, artist, then a call-to-action. No lyrics needed;
+    reuses find_hook, the b-roll builder, and render_text_card."""
+    y, sr = librosa.load(audio_path, mono=True, sr=44100)
+    start = find_hook(y, sr)
+    clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
+
+    # headline sequence — a promo reads slower than lyrics, so hold each line
+    lines = []
+    if title.strip():
+        lines.append(title.strip())
+    if artist.strip():
+        lines.append(artist.strip())
+    lines.append((caption or "").strip() or "OUT NOW")
+    n = max(1, len(lines))
+    slots = [i * (CLIP_SEC / n) for i in range(n)]
+    cards = [render_text_card(ln, "", font_style=font, position="center", rng=None) for ln in lines]
+
+    tmpdir = tempfile.mkdtemp(prefix="rollout_promo_")
+    try:
+        bgv = _broll_bg_video(style, moods, tmpdir) if bg != "cover" else None
+        if not bgv:
+            # cover fallback: a static, blurred, darkened push on the cover art
+            bgimg = prepare_background(cover)
+            bgp = os.path.join(tmpdir, "cover_bg.jpg")
+            bgimg.convert("RGB").save(bgp, quality=90)
+            bgv = os.path.join(tmpdir, "bg.mp4")
+            subprocess.run(
+                ["ffmpeg", "-y", "-loop", "1", "-i", bgp, "-t", str(CLIP_SEC),
+                 "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS}",
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
+                check=True, capture_output=True, timeout=180)
+
+        # readability scrim (same as the b-roll lyric renderer)
+        scrim = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(scrim)
+        for yy in range(H):
+            a = int(170 * max(0.0, (yy - H * 0.42) / (H * 0.58)))
+            sd.line([(0, yy), (W, yy)], fill=(0, 0, 0, min(170, a)))
+
+        n_frames = int(CLIP_SEC * FPS)
+        for f in range(n_frames):
+            t = f / FPS
+            idx = 0
+            for i in range(len(slots)):
+                if t >= slots[i]:
+                    idx = i
+            idx = min(idx, len(cards) - 1)
+            card = cards[idx]
+            dt = t - slots[idx]
+            pop = 1.0 + max(0.0, 0.16 * (1 - dt / 0.24)) if dt < 0.24 else 1.0
+            if pop > 1.001:
+                pw, ph = int(W * pop), int(H * pop)
+                scaled = card.resize((pw, ph), Image.BILINEAR)
+                ox, oy = (pw - W) // 2, (ph - H) // 2
+                card = scaled.crop((ox, oy, ox + W, oy + H))
+            frame = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+            frame.alpha_composite(scrim)
+            frame.alpha_composite(card)
+            frame.save(os.path.join(tmpdir, f"o{f:05d}.png"))
+
+        clip_wav = os.path.join(tmpdir, "clip.wav")
+        import soundfile as sf
+        sf.write(clip_wav, clip, sr)
+
+        subprocess.run(
+            ["ffmpeg", "-y",
+             "-i", bgv,
+             "-framerate", str(FPS), "-i", os.path.join(tmpdir, "o%05d.png"),
+             "-i", clip_wav,
+             "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1[v]",
+             "-map", "[v]", "-map", "2:a",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+             "-c:a", "aac", "-b:a", "192k", "-shortest", out_path],
+            check=True, capture_output=True, timeout=600)
+        return {"hook_start": round(start, 1), "lines": len(lines), "engine": "promo"}
+    finally:
+        import shutil as _sh
+        _sh.rmtree(tmpdir, ignore_errors=True)

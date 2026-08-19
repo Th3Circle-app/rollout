@@ -583,6 +583,80 @@ def lyric_video(
         },
     )
 
+
+@app.post("/promoclip")
+def promo_clip(
+    title: str = Form(""),
+    artist: str = Form(""),
+    caption: str = Form(""),
+    cover_url: str = Form(""),
+    file_id: str = Form(""),
+    moods: str = Form(""),
+    style: str = Form(""),
+    audio_key: str = Form(""),
+    font: str = Form("bold"),
+    bg: str = Form("broll"),
+    file: UploadFile | None = File(None),
+    authorization: str = Header(default=""),
+):
+    """Render a 15s vertical promo teaser from the song's hook — a shareable
+    TikTok/Reels/Shorts clip with a headline sequence over vibe-matched b-roll.
+    No lyrics required. Plain def so the ffmpeg render runs in the threadpool."""
+    from lyricvideo import make_promo_clip
+
+    audio_is_temp = False
+    if file is not None and file.filename:
+        suffix = os.path.splitext(file.filename)[1] or ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            try:
+                _copy_capped(file.file, tmp)
+            except HTTPException:
+                try: os.remove(tmp.name)
+                except OSError: pass
+                raise
+            audio_path = tmp.name
+        audio_is_temp = True
+    elif file_id:
+        _ensure_audio(file_id, audio_key, authorization)
+        audio_path = os.path.join(UPLOADS, os.path.basename(file_id))
+        if not os.path.isfile(audio_path):
+            return Response(status_code=404, content=b"unknown file_id")
+    else:
+        return Response(status_code=400, content=b"no audio provided")
+
+    if cover_url:
+        try:
+            _assert_public_url(cover_url)
+        except Exception:
+            cover_url = ""
+
+    out = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4").name
+    try:
+        _moods = [m for m in moods.split(",") if m]
+        meta = make_promo_clip(audio_path, title, artist, caption, out,
+                               cover=cover_url, moods=_moods, style=style, font=font, bg=bg)
+        with open(out, "rb") as f:
+            data = f.read()
+    except Exception as e:
+        return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
+    finally:
+        for p in ([out] + ([audio_path] if audio_is_temp else [])):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", (title or "promo")).strip("-") or "promo"
+    return Response(
+        content=data,
+        media_type="video/mp4",
+        headers={
+            "X-Hook-Start": str(meta["hook_start"]),
+            "X-Engine": meta.get("engine", "promo"),
+            "Content-Disposition": f'attachment; filename="{safe_name}-promo.mp4"',
+        },
+    )
+
 # Uploaded audio must survive engine redeploys/restarts, otherwise a later step
 # (e.g. the lyric-video render) can't find the track's file_id. Store it on the
 # mounted persistent volume in prod (/root/.cache is the Fly volume), falling

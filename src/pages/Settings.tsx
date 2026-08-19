@@ -38,7 +38,7 @@ export function loadImgConn(): ImgConn {
 const BILLING_PORTAL_URL = "https://billing.stripe.com/p/login/00w00lgJrcSXgT97X528800";
 
 export default function App() {
-  const { plan, songsUsed, release, session, cloud, signOut, openUpgrade, avatarUrl, updateAvatar } = useStore();
+  const { plan, songsUsed, release, session, cloud, signOut, openUpgrade, avatarUrl, updateAvatar, go } = useStore();
   const initials = (release?.artist || "R").slice(0, 2).toUpperCase();
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [avatarErr, setAvatarErr] = useState("");
@@ -227,6 +227,9 @@ export default function App() {
               );
             })}
           </div>
+          <button onClick={() => go("Pricing")} className="self-start text-xs text-violet-400 hover:underline">
+            Compare all plans →
+          </button>
           {plan !== "free" && (
             <div className="border-white/8 border-t-1 border-r-0 border-b-0 border-l-0 border-solid pt-5 flex items-center justify-between gap-4">
               <div className="flex flex-col gap-0.5">

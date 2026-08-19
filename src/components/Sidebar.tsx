@@ -1,4 +1,4 @@
-import { ArrowLeft, Gift, Layers, Library, Package, Settings, Sparkles, Upload, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Gift, Layers, Library, Package, Settings, Sparkles, Upload, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
 
@@ -8,6 +8,7 @@ const BACK_TARGET: Record<string, { to: string; label: string }> = {
   Build: { to: "Import", label: "Import" },
   Cover: { to: "Dashboard", label: "Releases" },
   Lyrics: { to: "Dashboard", label: "Releases" },
+  Promo: { to: "Dashboard", label: "Releases" },
   Plan: { to: "Dashboard", label: "Releases" },
   Distribute: { to: "Dashboard", label: "Releases" },
   Ads: { to: "Dashboard", label: "Releases" },
@@ -26,13 +27,13 @@ const NAV: { label: string; icon: typeof Upload; target: string; group: string[]
     group: ["Dashboard", "Distribute", "Plan", "Landing", "Ads", "Ship"],
   },
   { label: "Library", icon: Library, target: "Library", group: ["Library"] },
-  { label: "Assets", icon: Layers, target: "Cover", group: ["Cover", "Lyrics"] },
+  { label: "Assets", icon: Layers, target: "Cover", group: ["Cover", "Lyrics", "Promo"] },
   { label: "Rewards", icon: Gift, target: "Rewards", group: ["Rewards"] },
   { label: "Settings", icon: Settings, target: "Settings", group: ["Settings"] },
 ];
 
 export default function Sidebar() {
-  const { page, go, release, plan, openUpgrade, avatarUrl } = useStore();
+  const { page, go, release, plan, openUpgrade, avatarUrl, isAdmin } = useStore();
   const initials = (release?.artist || "R").slice(0, 2).toUpperCase();
   const planLabel = plan === "studio" ? "Studio" : plan === "artist" ? "Artist" : "Free";
 
@@ -72,6 +73,20 @@ export default function Sidebar() {
             </Button>
           );
         })}
+        {isAdmin && (
+          <Button
+            variant="ghost"
+            onClick={() => go("Admin")}
+            className={
+              page === "Admin"
+                ? "bg-[#1E1E28] text-[#F2F0F7] px-3 py-2 justify-start gap-3 w-full"
+                : "text-[#9A96AD] px-3 py-2 justify-start gap-3 w-full hover:text-[#F2F0F7]"
+            }
+          >
+            <BarChart3 className={page === "Admin" ? "size-4 text-violet-500" : "size-4"} />
+            <span className="font-medium text-sm leading-5">Metrics</span>
+          </Button>
+        )}
       </div>
       <div className="mt-auto flex w-full flex-col gap-4 pt-6">
         {plan === "free" ? (
