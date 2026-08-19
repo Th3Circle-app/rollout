@@ -176,24 +176,7 @@ def gen_gemini(prompt, key, seed=0, size=1024, model="", image_b64=""):
         # gemini-2.5-flash-image must be told to return an image, not text.
         "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
     }
-    j = None
-    # The free image tier is a few requests/minute — a burst 429 is common on the
-    # very first click. Retry once after a short wait before giving up.
-    for attempt in range(2):
-        try:
-            j = _post_json(url, body, {}, timeout=300)
-            break
-        except ValueError as e:
-            if "429" in str(e) and attempt == 0:
-                time.sleep(4)
-                continue
-            if "429" in str(e):
-                raise RuntimeError(
-                    "Google rate-limited this key (429). The free Gemini image tier "
-                    "allows only a few generations per minute. Wait ~30 seconds and try "
-                    "again, or enable billing in Google AI Studio for higher limits."
-                )
-            raise
+    j = _post_json(url, body, {}, timeout=300)
     for cand in (j or {}).get("candidates", []):
         for part in cand.get("content", {}).get("parts", []):
             data = part.get("inlineData", {}).get("data")
@@ -350,18 +333,56 @@ def generate(provider, prompt, key="", seed=0, size=1024, model="", base_url="",
         raise RuntimeError(
             f"'{provider}' can't restyle photos — connect Google Gemini (free) "
             "or Replicate in Settings for Restyle mode")
-    try:
+
+    def _dispatch():
         if provider in ("custom", "cloudflare"):
             return fn(prompt, key, seed, size, model, base_url)
         if image_b64:
             return fn(prompt, key, seed, size, model, image_b64)
         return fn(prompt, key, seed, size, model)
-    except urllib.error.HTTPError as e:
-        detail = ""
+
+    # One transparent retry on a rate-limit — every free tier (Gemini, Together,
+    # HF, ...) allows only a few req/min, so a first-click 429 is almost always a
+    # burst, not a broken key. Retry once, then explain it in plain language.
+    last = None
+    for attempt in range(2):
         try:
-            detail = e.read()[:200].decode(errors="ignore")
-        except Exception:
-            pass
-        raise RuntimeError(f"{provider}: HTTP {e.code} — {detail or e.reason}")
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"{provider}: unreachable ({e.reason})")
+            return _dispatch()
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read()[:200].decode(errors="ignore")
+            except Exception:
+                pass
+            last = RuntimeError(f"{provider}: HTTP {e.code} — {detail or e.reason}")
+            if e.code == 429 and attempt == 0:
+                time.sleep(3)
+                continue
+            if e.code == 429:
+                raise RuntimeError(
+                    f"{provider} rate-limited this key (429). Free tiers allow only a few "
+                    "generations per minute — wait ~30 seconds and try again, or use a paid "
+                    "key / the built-in generator for unlimited use.")
+            if e.code in (401, 403):
+                raise RuntimeError(f"{provider} rejected the key (HTTP {e.code}) — double-check you pasted the full API key.")
+            if e.code in (402,):
+                raise RuntimeError(f"{provider} needs billing enabled on this key (HTTP 402).")
+            raise last
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"{provider}: unreachable ({e.reason})")
+        except ValueError as e:
+            # post_json raises ValueError("post failed: HTTP NNN — <body>")
+            msg = str(e)
+            last = RuntimeError(f"{provider}: {msg}")
+            if "429" in msg and attempt == 0:
+                time.sleep(3)
+                continue
+            if "429" in msg:
+                raise RuntimeError(
+                    f"{provider} rate-limited this key (429). Free tiers allow only a few "
+                    "generations per minute — wait ~30 seconds and try again, or use a paid "
+                    "key / the built-in generator for unlimited use.")
+            if "401" in msg or "403" in msg:
+                raise RuntimeError(f"{provider} rejected the key — double-check you pasted the full API key.")
+            raise last
+    raise last  # both attempts exhausted

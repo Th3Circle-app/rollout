@@ -481,8 +481,12 @@ export default function App() {
               {testState === "testing" ? "Testing…" : "Test connection"}
             </Button>
             {testState === "ok" && <span className="font-mono text-xs text-[#46E0A8]">● works — covers will use this</span>}
-            {testState === "fail" && <span className="font-mono text-xs text-[#F0A45B] truncate max-w-xs" title={testMsg}>● failed: {testMsg.slice(0, 60) || "check the key"}</span>}
           </div>
+          {testState === "fail" && (
+            <p className="font-mono text-xs text-[#F0A45B] leading-relaxed max-w-lg">
+              ● {testMsg.replace(/^[a-z]+:\s*HTTP\s*\d+\s*—?\s*/i, "") || "couldn't reach the model — check the key and try again"}
+            </p>
+          )}
         </div>
 
         {/* account */}
