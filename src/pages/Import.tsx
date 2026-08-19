@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight, AudioLines, FileText, Upload, X, Loader2,
+  ArrowRight, AudioLines, FileText, Upload, X, Loader2, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore, deriveTitleArtist, FREE_SONG_LIMIT } from "@/store";
@@ -28,6 +28,35 @@ export default function App() {
   // lands — with stage labels so it feels like real work, not a fake spinner.
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  // Auto-detect the full lyrics from the audio (Demucs isolates the vocal, then
+  // Cloudflare Whisper transcribes and Llama formats it). Available to every
+  // account — it runs on our free stack. Best-effort; the artist edits after.
+  async function scanLyrics() {
+    if (!result?.file_id || scanning) return;
+    setScanning(true);
+    try {
+      let audio_key = "";
+      if (supabase) {
+        const { data: sess } = await supabase.auth.getSession();
+        const uid = sess.session?.user?.id;
+        if (uid) audio_key = `${uid}/${result.file_id}`;
+      }
+      const r = await fetch(`${API}/scanlyrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ file_id: result.file_id, audio_key }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const j = await r.json();
+      if (j.lyrics) setLyrics(j.lyrics);
+    } catch {
+      /* best-effort — leave the field for manual entry */
+    } finally {
+      setScanning(false);
+    }
+  }
   useEffect(() => {
     if (status !== "analyzing") return;
     const stages = ["Uploading your track", "Reading the vibe", "Finding the hook", "Mapping mood, key & BPM"];
@@ -227,12 +256,23 @@ export default function App() {
                           <FileText className="size-3" /> Lyrics
                           <span className="normal-case tracking-normal text-[#5E5A72]">— unlocks the synced lyric video &amp; lyric-quote captions</span>
                         </span>
-                        <button
-                          onClick={() => lyricFileRef.current?.click()}
-                          className="font-mono text-[11px] text-violet-500 hover:text-[#F2F0F7]"
-                        >
-                          upload .txt
-                        </button>
+                        <div className="flex items-center gap-4">
+                          <button
+                            onClick={scanLyrics}
+                            disabled={scanning}
+                            className="flex items-center gap-1.5 font-mono text-[11px] text-violet-400 hover:text-[#F2F0F7] disabled:opacity-60"
+                          >
+                            {scanning
+                              ? <><Loader2 className="size-3 animate-spin" /> detecting… (~1-2 min)</>
+                              : <><Sparkles className="size-3" /> auto-detect from audio</>}
+                          </button>
+                          <button
+                            onClick={() => lyricFileRef.current?.click()}
+                            className="font-mono text-[11px] text-violet-500 hover:text-[#F2F0F7]"
+                          >
+                            upload .txt
+                          </button>
+                        </div>
                         <input
                           ref={lyricFileRef}
                           type="file"

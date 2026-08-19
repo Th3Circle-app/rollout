@@ -375,6 +375,24 @@ def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
         return Response(status_code=422, content=(f"detection failed: {e}")[:200].encode(), media_type="text/plain")
 
 
+@app.post("/scanlyrics")
+def scanlyrics(req: DetectReq, authorization: str = Header(default="")):
+    """Auto-detect the FULL lyrics from the audio — no pasting needed. Demucs
+    isolates the vocal locally, then Cloudflare's free Whisper transcribes it and
+    Llama cleans it into structured lyrics. Slow (~1-3 min); the client shows a
+    spinner. Best-effort; the artist edits the result before it ships."""
+    _ensure_audio(req.file_id, req.audio_key, authorization)  # re-hydrate if gone
+    base = os.path.basename(req.file_id or "")
+    path = os.path.join(UPLOADS, base) if base else ""
+    if not path or not os.path.isfile(path):
+        return Response(status_code=404, content=b"unknown file_id")
+    try:
+        from lyricscan import scan_lyrics
+        return {"lyrics": scan_lyrics(path)}
+    except Exception as e:
+        return Response(status_code=422, content=(f"lyric scan failed: {e}")[:200].encode(), media_type="text/plain")
+
+
 @app.get("/hookclip/{file_id}")
 def hookclip(file_id: str):
     """Serve the hook audio so the artist can listen while correcting words."""
