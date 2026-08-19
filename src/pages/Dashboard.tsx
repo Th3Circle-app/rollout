@@ -53,7 +53,7 @@ export default function App() {
     : null;
 
   const ASSETS: { label: string; sub: string; page: string; ready: boolean; soon?: boolean; status: string; img?: string; grad: string; icon: typeof ImageIcon }[] = [
-    { label: "Cover Art", sub: "AI studio in the works", page: "Cover", ready: false, soon: true, status: "Soon", grad: "linear-gradient(135deg,#7c3aed,#4f46e5)", icon: ImageIcon },
+    { label: "Cover Art", sub: "AI studio in the works", page: "Cover", ready: false, soon: true, status: "Coming soon", grad: "linear-gradient(135deg,#7c3aed,#4f46e5)", icon: ImageIcon },
     { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, status: lyricVideoDone ? "Ready" : "Create", grad: "linear-gradient(135deg,#4f46e5,#0ea5e9)", icon: Clapperboard },
     { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: false, status: "Create", grad: "linear-gradient(135deg,#db2777,#7c3aed)", icon: Film },
     { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), status: releaseDate ? "Ready" : "Set date", grad: "linear-gradient(135deg,#059669,#0d9488)", icon: Calendar },
@@ -141,8 +141,12 @@ export default function App() {
                   )}
                   <span
                     className={
-                      "absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur " +
-                      (a.soon ? "bg-black/45 text-[#F0A45B]" : a.ready ? "bg-black/45 text-[#5ce6a8]" : "bg-black/45 text-white/90")
+                      "absolute right-3 top-3 rounded-full font-semibold backdrop-blur " +
+                      (a.soon
+                        ? "px-4 py-2 text-sm uppercase tracking-wide bg-[#F0A45B]/20 text-[#F7B96A] ring-1 ring-[#F0A45B]/40 shadow-lg"
+                        : a.ready
+                          ? "px-2.5 py-1 text-[11px] bg-black/45 text-[#5ce6a8]"
+                          : "px-2.5 py-1 text-[11px] bg-black/45 text-white/90")
                     }
                   >
                     {a.ready && !a.soon && <Check className="mr-1 inline size-3 align-[-1px]" />}
