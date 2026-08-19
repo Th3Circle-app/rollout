@@ -309,16 +309,47 @@ PLATFORM_MODELS = [
 ]
 
 
+def platform_source():
+    """Which generator the platform (no-user-key) path uses, by env priority:
+    a funded fal.ai account (premium catalog) > a free Together FLUX Schnell key
+    > free Cloudflare Workers AI > nothing. This lets us run a FREE fast generator
+    now (Together's FLUX.1-schnell-Free is a $0 model) and flip to fal the day we
+    have revenue — just set FAL_KEY, no code change."""
+    fal = os.environ.get("FAL_KEY", "")
+    if fal:
+        return {"provider": "platform", "key": fal, "model": "", "base_url": "", "tier": "premium"}
+    tog = os.environ.get("TOGETHER_API_KEY", "") or os.environ.get("TOGETHER_KEY", "")
+    if tog:
+        return {"provider": "together", "key": tog,
+                "model": "black-forest-labs/FLUX.1-schnell-Free", "base_url": "", "tier": "free"}
+    cf_key = os.environ.get("CF_API_TOKEN", "")
+    cf_acct = os.environ.get("CF_ACCOUNT_ID", "")
+    if cf_key and cf_acct:
+        return {"provider": "cloudflare", "key": cf_key,
+                "model": "@cf/black-forest-labs/flux-1-schnell", "base_url": cf_acct, "tier": "free"}
+    return None
+
+
 def platform_key():
-    return os.environ.get("FAL_KEY", "")
+    s = platform_source()
+    return s["key"] if s else ""
 
 
 def list_models():
-    live = bool(platform_key())
-    return [
-        {**m, "available": m["tier"] == "free" or live}
-        for m in PLATFORM_MODELS
-    ]
+    s = platform_source()
+    fal_live = bool(s and s["provider"] == "platform")   # premium fal-only catalog
+    fast_live = bool(s)                                  # any source powers "fast"
+    out = []
+    for m in PLATFORM_MODELS:
+        if m["id"] == "builtin":
+            out.append({**m, "available": True})
+        elif m["id"] == "flux-schnell":
+            # The everyday fast pick — served by whatever platform source is live
+            # (free Together/Cloudflare now, fal once funded).
+            out.append({**m, "label": "Rollout Fast", "available": fast_live})
+        else:
+            out.append({**m, "available": fal_live})     # Pro / Seedream / Recraft = fal only
+    return out
 
 
 IMG2IMG = {"gemini", "replicate"}  # engines that can restyle a photo
