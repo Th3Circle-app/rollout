@@ -1,0 +1,12 @@
+# Content-hashed assets never change → cache them forever.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The HTML entry and fonts must always revalidate so a new deploy shows up
+# immediately instead of serving a stale bundle from the browser cache.
+/
+  Cache-Control: public, max-age=0, must-revalidate
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/fonts/*
+  Cache-Control: public, max-age=604800
