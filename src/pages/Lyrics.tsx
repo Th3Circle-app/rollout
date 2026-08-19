@@ -311,9 +311,11 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       onClick={() => {
-                        const t = Math.max(0, Math.floor(trackRef.current?.currentTime ?? 0));
-                        const max = Math.max(0, Math.floor(trackDur - 15));
-                        setSectionStart(Math.min(t, max));
+                        const el = trackRef.current;
+                        const t = Math.max(0, Math.floor(el?.currentTime ?? 0));
+                        const dur = el?.duration || trackDur || 0;
+                        const maxStart = dur > 15 ? Math.floor(dur - 15) : t; // don't force 0 if dur unknown
+                        setSectionStart(Math.min(t, maxStart));
                       }}
                       className="rounded-xl h-9 px-4 gap-2"
                     >
@@ -346,8 +348,8 @@ export default function App() {
                     className="rounded-xl h-9 px-4 gap-2 disabled:opacity-40"
                   >
                     {detecting
-                      ? (<><Loader2 className="size-3.5 animate-spin" />Listening (~40s)…</>)
-                      : (<><AudioLines className="size-3.5" />Detect from vocals</>)}
+                      ? (<><Loader2 className="size-3.5 animate-spin" />Listening…</>)
+                      : (<><AudioLines className="size-3.5" />Detect from {sectionStart != null ? clock(sectionStart) : "the hook"}</>)}
                   </Button>
                 </div>
                 {detecting && (
