@@ -388,7 +388,7 @@ def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="b
                 "ffmpeg", "-y",
                 "-framerate", str(FPS), "-i", os.path.join(tmpdir, "f%05d.jpg"),
                 "-i", clip_wav,
-                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "21",
                 "-c:a", "aac", "-b:a", "192k", "-shortest",
                 out_path,
             ],
@@ -416,7 +416,7 @@ def _broll_bg_video(style, moods, tmpdir):
             subprocess.run(
                 ["ffmpeg", "-y", "-i", p, "-t", "4",
                  "-vf", "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,fps=24,setsar=1",
-                 "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", npth],
+                 "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", npth],
                 check=True, capture_output=True, timeout=120)
             norm.append(npth)
         except Exception:
@@ -432,7 +432,7 @@ def _broll_bg_video(style, moods, tmpdir):
     bgv = os.path.join(tmpdir, "bg.mp4")
     subprocess.run(
         ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", listp, "-t", "15",
-         "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
+         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
         check=True, capture_output=True, timeout=180)
     return bgv
 
@@ -502,7 +502,7 @@ def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=No
              "-i", clip_wav,
              "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1[v]",
              "-map", "[v]", "-map", "2:a",
-             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "21",
              "-c:a", "aac", "-b:a", "192k", "-shortest", out_path],
             check=True, capture_output=True, timeout=600)
         return {"hook_start": round(start, 1), "bpm": round(float(np.atleast_1d(tempo)[0])),
@@ -545,7 +545,7 @@ def make_promo_clip(audio_path, title, artist, caption, out_path,
             subprocess.run(
                 ["ffmpeg", "-y", "-loop", "1", "-i", bgp, "-t", str(CLIP_SEC),
                  "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS}",
-                 "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
+                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", bgv],
                 check=True, capture_output=True, timeout=180)
 
         # readability scrim (same as the b-roll lyric renderer)
@@ -587,7 +587,7 @@ def make_promo_clip(audio_path, title, artist, caption, out_path,
              "-i", clip_wav,
              "-filter_complex", "[0:v][1:v]overlay=0:0:shortest=1[v]",
              "-map", "[v]", "-map", "2:a",
-             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "fast", "-crf", "21",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-crf", "21",
              "-c:a", "aac", "-b:a", "192k", "-shortest", out_path],
             check=True, capture_output=True, timeout=600)
         return {"hook_start": round(start, 1), "lines": len(lines), "engine": "promo"}
