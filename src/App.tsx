@@ -15,6 +15,7 @@ import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
 import NoRelease from "./components/NoRelease";
+import ComingSoon from "./components/ComingSoon";
 import { useEffect, useState } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
@@ -91,6 +92,11 @@ const PAGES: Record<string, React.ComponentType> = {
 // empty account they render an import prompt instead of demo data.
 const REQUIRE_RELEASE = new Set(["Cover", "Distribute", "Plan", "Lyrics", "Promo", "Landing", "Ads", "Ship"]);
 
+// Features parked as "Coming soon" until they're hardened for release. The AI
+// Cover Studio is held back until revenue funds a fast, reliable generator —
+// shipping the slow/inconsistent free version would cheapen the studio.
+const COMING_SOON = new Set(["Cover"]);
+
 function Shell() {
   const { page, cloud, session, release } = useStore();
   const Current = PAGES[page] ?? Import;
@@ -157,9 +163,14 @@ function Shell() {
         <Sidebar />
         <main key={page} className="page-enter min-w-0 flex-1">
           <ErrorBoundary fallback={<PageError />}>
-            {REQUIRE_RELEASE.has(page) && !release && !preview
-              ? <NoRelease tool={(TITLES[page] ?? "this").toLowerCase()} />
-              : <Current />}
+            {COMING_SOON.has(page)
+              ? <ComingSoon
+                  title="Cover Studio"
+                  blurb="The AI cover generator is getting a serious upgrade — faster, sharper, and on-brand every time. It's coming in a future update. For now, add your finished cover art through your distributor."
+                />
+              : REQUIRE_RELEASE.has(page) && !release && !preview
+                ? <NoRelease tool={(TITLES[page] ?? "this").toLowerCase()} />
+                : <Current />}
           </ErrorBoundary>
         </main>
       </div>
