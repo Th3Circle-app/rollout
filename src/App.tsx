@@ -14,6 +14,7 @@ import Rewards from "./pages/Rewards";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import Pricing from "./pages/Pricing";
+import NoRelease from "./components/NoRelease";
 import { useEffect, useState } from "react";
 import Auth from "./components/Auth";
 import Sidebar from "./components/Sidebar";
@@ -86,8 +87,12 @@ const PAGES: Record<string, React.ComponentType> = {
   Pricing,
 };
 
+// Tool pages that build ON a track — meaningless without one. Opened on an
+// empty account they render an import prompt instead of demo data.
+const REQUIRE_RELEASE = new Set(["Cover", "Distribute", "Plan", "Lyrics", "Promo", "Landing", "Ads", "Ship"]);
+
 function Shell() {
-  const { page, cloud, session } = useStore();
+  const { page, cloud, session, release } = useStore();
   const Current = PAGES[page] ?? Import;
   const [showAuth, setShowAuth] = useState(false);
 
@@ -152,7 +157,9 @@ function Shell() {
         <Sidebar />
         <main key={page} className="page-enter min-w-0 flex-1">
           <ErrorBoundary fallback={<PageError />}>
-            <Current />
+            {REQUIRE_RELEASE.has(page) && !release && !preview
+              ? <NoRelease tool={(TITLES[page] ?? "this").toLowerCase()} />
+              : <Current />}
           </ErrorBoundary>
         </main>
       </div>
