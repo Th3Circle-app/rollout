@@ -28,6 +28,13 @@ const IMG = (prompt: string, seed: number) =>
 // Unless the artist actually asks for a person, steer hard toward abstract,
 // atmospheric cover art so it stops generating random people.
 const PERSON_RE = /\b(portrait|person|people|woman|women|girl|girls|man|men|boy|guy|face|singer|rapper|model|self|selfie|figure|body|human|character|posing)\b/i;
+// Global variant used to physically remove person-words from a generated prompt.
+// Flux ignores "no woman" while the positive prompt still says "a woman", so the
+// only reliable steer is to delete the subject noun, then reinforce the negative.
+const PERSON_STRIP_RE = /\b(portraits?|persons?|people|wom[ae]n|girls?|m[ae]n|boys?|guys?|faces?|singers?|rappers?|models?|selfies?|figures?|bodies|body|humans?|characters?|posing|standing|sitting|her |his )\b/gi;
+const NO_PEOPLE_TAIL =
+  ", abstract atmospheric album cover, environment texture light and color only, " +
+  "no people, no person, no human, no face, no portrait, unpopulated empty scene";
 
 const fullPrompt = (direction: string, keywords: string[], moods: string[]) => {
   const kws = keywords.length ? keywords.join(", ") : "abstract texture";
@@ -309,8 +316,22 @@ export default function App() {
     () => fullPrompt(direction, r.keywords, r.moods),
     [direction, r.keywords, r.moods]
   );
-  // art-directed prompt (design knowledge) wins; local build is the fallback
-  const prompt = artPrompt || localPrompt;
+  // art-directed prompt (design knowledge) wins; local build is the fallback.
+  // Whatever the source, unless the artist actually asked for a person we strip
+  // any person-words the LLM slipped in and reinforce the negative — otherwise
+  // Flux keeps defaulting every open-ended cover to a woman's portrait.
+  const prompt = useMemo(() => {
+    // The artist's typed words ALWAYS lead so Generate reflects them instantly —
+    // never wait on (or get overridden by) the debounced backend art-direction.
+    const dir = direction.trim();
+    const base = artPrompt || localPrompt;
+    const chosen = dir && !base.toLowerCase().includes(dir.toLowerCase())
+      ? `album cover art, ${dir}, ${base}`
+      : base;
+    const wantsPerson = PERSON_RE.test(`${direction} ${(r.keywords || []).join(" ")}`);
+    if (wantsPerson) return chosen;
+    return chosen.replace(PERSON_STRIP_RE, "").replace(/\s{2,}/g, " ").replace(/\s+,/g, ",").trim() + NO_PEOPLE_TAIL;
+  }, [artPrompt, localPrompt, direction, r.keywords]);
   const builtinUrls = useMemo(() => seeds.map((s) => IMG(prompt, s)), [prompt, seeds]);
   // BYO provider chain: generate through the artist's connected account,
   // auto-fallback to the built-in generator on any failure.

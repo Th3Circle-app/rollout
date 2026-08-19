@@ -28,6 +28,21 @@ AVOID = (
     "fantasy concept art, perfect airbrushed skin"
 )
 
+# Appended whenever the artist did NOT ask for a person. Flux/pollinations
+# defaults every open-ended prompt to a woman's portrait, so an "Auto" cover
+# for an instrumental kept coming back as random people. This forces the
+# subject to be the environment, not a figure.
+import re
+_PERSON_RE = re.compile(
+    r"\b(portrait|person|people|wom[ae]n|girls?|m[ae]n|boys?|guys?|face|"
+    r"singer|rapper|model|self|selfie|figure|body|human|character|posing)\b",
+    re.I,
+)
+NO_PEOPLE = (
+    "no people, no person, no human, no face, no portrait, "
+    "unpopulated empty scene, environment texture and light only"
+)
+
 # --- style archetypes ------------------------------------------------------
 # Each is a real album-art tradition: prompt language + a layer recipe the
 # canvas auto-applies (user can still tweak every layer).
@@ -49,7 +64,7 @@ STYLES = {
     "soul": {
         "label": "Vintage Soul",
         "prompt": (
-            "1970s soul record cover photograph, warm studio portrait lighting, "
+            "1970s soul record cover photograph, warm studio lighting, "
             "medium format film, earthy amber and brown tones, soft focus edges, "
             "aged print texture"
         ),
@@ -177,13 +192,21 @@ def direct(moods=None, keywords=None, direction="", style="auto", genre=""):
             (MOOD_STYLE[m] for m in moods if m in MOOD_STYLE), "film")
 
     s = STYLES[style]
-    subject = direction.strip() or ", ".join(keywords[:3]) or "an evocative scene"
+    wants_person = bool(_PERSON_RE.search(f"{direction} {' '.join(keywords)}"))
+    subject = (
+        direction.strip()
+        or ", ".join(keywords[:3])
+        or ("the subject" if wants_person else "an atmospheric environment, landscape or still life")
+    )
     mood_str = ", ".join(moods[:3]) if moods else "cinematic"
 
     prompt = (
         f"{BASE}, {s['prompt']}, depicting {subject}, "
         f"{mood_str} mood, {AUTHENTIC}, {AVOID}"
     )
+    # Only album covers the artist explicitly asked to feature a person keep one.
+    if not wants_person:
+        prompt += f", {NO_PEOPLE}"
     return {"style": style, "label": s["label"], "prompt": prompt, "layers": s["layers"]}
 
 
