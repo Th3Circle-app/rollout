@@ -8,6 +8,7 @@ import {
   Loader2,
   Lock,
   RefreshCw,
+  Sparkles,
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -653,6 +654,29 @@ export default function App() {
               ))}
             </div>
           )}
+
+          {/* describe your cover — the prompt drives the SAME layer system below
+              and whichever generator is picked (built-in is $0/keyless; your
+              connected model in Settings if you added one). */}
+          <div className="flex px-6 xl:px-12 pt-5 flex-col gap-2">
+            <span className="section-label">Describe your cover</span>
+            <div className="flex gap-2">
+              <input
+                value={direction}
+                onChange={(e) => setDirection(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") regenerate(); }}
+                placeholder="moody neon city at night, rain, cinematic — or 'a woman singing' if you want a person"
+                className="flex-1 rounded-xl panel-inset px-4 py-3 text-sm text-neutral-50 placeholder:text-[#5E5A72] focus:outline-none focus:ring-2 focus:ring-violet-500/40"
+              />
+              <Button onClick={regenerate} className="btn-primary rounded-xl text-white gap-2 shrink-0">
+                <Sparkles className="size-4" />
+                Generate{plan === "free" && gensLeft > 0 ? ` · ${gensLeft} left` : ""}
+              </Button>
+            </div>
+            <span className="text-[11px] leading-tight text-[#5E5A72]">
+              Type what you want and hit Generate. It renders into the layer system below and uses your connected AI model if you added one in Settings. It only draws people when you ask for one.
+            </span>
+          </div>
 
           <div className="flex px-6 xl:px-12 py-8 items-start gap-8">
             {/* base variants — Screen 6 style: rounded-2xl + amber AI badge */}
