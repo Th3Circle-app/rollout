@@ -44,8 +44,12 @@ primary_region = "sjc"
 # avoids OOM-kills on the analyze / lyric-align paths. Bump to shared-cpu-4x /
 # 8gb if you run demucs+whisper on large files concurrently.
 [[vm]]
-  size = "shared-cpu-2x"
-  memory = "4gb"
+  # 8GB + 4 vCPU: a promo b-roll render (ffmpeg passes) layered on the resident
+  # CLAP/demucs models blew past 4GB and OOM-killed mid-render (dropped the
+  # client connection as "Failed to fetch"). More CPU also cuts render wall-clock.
+  # Still scales to zero when idle, so idle cost is unchanged.
+  size = "shared-cpu-4x"
+  memory = "8gb"
 
 # Persistent model cache — the checkpoints download to /root/.cache once instead
 # of on every cold start.
