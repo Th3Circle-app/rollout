@@ -1,5 +1,6 @@
 """Rollout backend: vibe analysis, cover upscale, captions."""
 import os, io, re, shutil, socket, tempfile, ipaddress, urllib.request
+import functools, threading
 import time as _time
 from urllib.parse import urlparse
 from fastapi import FastAPI, UploadFile, File, Form, Header, HTTPException
@@ -84,6 +85,30 @@ class _AuthGate(BaseHTTPMiddleware):
 
 
 app.add_middleware(_AuthGate)
+
+
+# ── one heavy job at a time ─────────────────────────────────────────────────
+# The engine is a small shared-CPU box: a single Demucs / Whisper / ffmpeg job
+# already pins both cores, so two heavy jobs at once thrash and crawl (a promo
+# render + a lyric detect were fighting and took 15 min). Serialize them — the
+# second heavy request gets a clean 409 "busy" instead of grinding everything.
+_ENGINE_LOCK = threading.Lock()
+
+
+def single_flight(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not _ENGINE_LOCK.acquire(blocking=False):
+            return Response(
+                status_code=409,
+                content=b"engine busy: another render is running, wait a moment and try again",
+                media_type="text/plain",
+            )
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _ENGINE_LOCK.release()
+    return wrapper
 
 
 # ── SSRF-safe fetch (IP-pinned, DNS-rebinding proof) — shared in netguard.py ──
@@ -370,6 +395,7 @@ def _hook_clip_path(file_id: str, start=None):
 
 
 @app.post("/detectlyrics")
+@single_flight
 def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
     """Auto-detect sung words in the hook with exact, silence-snapped timing.
     The editor lets the artist fix any misheard word before rendering."""
@@ -385,6 +411,7 @@ def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
 
 
 @app.post("/scanlyrics")
+@single_flight
 def scanlyrics(req: DetectReq, authorization: str = Header(default="")):
     """Auto-detect the FULL lyrics from the audio — no pasting needed. Demucs
     isolates the vocal locally, then Cloudflare's free Whisper transcribes it and
@@ -542,6 +569,7 @@ def captions(req: CaptionReq):
 
 
 @app.post("/lyricvideo")
+@single_flight
 def lyric_video(
     lyrics: str = Form(...),
     title: str = Form(""),
@@ -652,6 +680,7 @@ def lyric_video(
 
 
 @app.post("/promoclip")
+@single_flight
 def promo_clip(
     title: str = Form(""),
     artist: str = Form(""),
@@ -739,6 +768,7 @@ os.makedirs(UPLOADS, exist_ok=True)
 
 
 @app.post("/analyze")
+@single_flight
 def do_analyze(file: UploadFile = File(...), lyrics: str = Form("")):
     # plain def -> runs in the threadpool; librosa/CLAP won't block the loop
     suffix = os.path.splitext(file.filename or "")[1] or ".wav"

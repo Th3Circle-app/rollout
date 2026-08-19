@@ -157,14 +157,19 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ file_id: fileId, audio_key: audioKey, start: sectionStart ?? -1 }),
       });
+      if (res.status === 409) throw new Error("busy");
       if (!res.ok) throw new Error("detection failed");
       const j = await res.json();
       const ws = Array.isArray(j.words) ? j.words : [];
       setHookStart(j.hook_start);
       setWords(ws);
       if (!ws.length) setDetectErr("Couldn't hear clear words in the hook — paste your lyrics below instead.");
-    } catch {
-      setDetectErr("Detection failed — is the engine running?");
+    } catch (e) {
+      setDetectErr(
+        (e as Error)?.message === "busy"
+          ? "The engine is finishing another render — wait a moment and try again."
+          : "Detection failed — is the engine running?"
+      );
     } finally {
       setDetecting(false);
     }
@@ -210,6 +215,7 @@ export default function App() {
       if (audioFile) fd.append("file", audioFile);
       else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
       const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
+      if (res.status === 409) throw new Error("The engine is finishing another render — wait a moment and try again.");
       if (!res.ok) throw new Error("Render failed");
       const blob = await res.blob();
       if (videoUrl) URL.revokeObjectURL(videoUrl);

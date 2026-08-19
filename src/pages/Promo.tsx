@@ -72,6 +72,7 @@ export default function Promo() {
       fd.append("font", font);
       fd.append("bg", bg === "broll" && brollUp ? "broll" : "cover");
       const res = await fetch(`${API}/promoclip`, { method: "POST", body: fd });
+      if (res.status === 409) throw new Error("The engine is finishing another render — wait a moment and try again.");
       if (!res.ok) throw new Error("Render failed");
       const blob = await res.blob();
       if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -188,6 +189,7 @@ export default function Promo() {
                 {status === "rendering" ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
                 {status === "rendering" ? "Rendering…" : "Generate promo clip"}
               </Button>
+              <span className="font-mono text-[10px] text-[#5E5A72]">One render at a time — let a lyric video or detect finish before starting this.</span>
               {status === "rendering" && (
                 <div className="flex flex-col gap-1.5">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-[#1E1E28]">
