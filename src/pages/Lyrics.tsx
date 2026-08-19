@@ -92,20 +92,28 @@ export default function App() {
   const fileId = (r as { file_id?: string }).file_id || "";
   const hasAudio = Boolean(fileId || audioFile);
 
+  // Section picker: which 15s window becomes the hook. null = auto-find it.
+  const [sectionStart, setSectionStart] = useState<number | null>(null);
+  const [trackUrl, setTrackUrl] = useState("");
+  const [trackDur, setTrackDur] = useState(0);
+  const trackRef = useRef<HTMLAudioElement>(null);
+
   // The hook-clip player: the engine is auth-gated, but a native <audio src> can't
   // send the bearer token, so it 401s and never plays. Fetch it through the
-  // auth-wrapped fetch and hand the <audio> a blob URL instead.
+  // auth-wrapped fetch and hand the <audio> a blob URL instead. Reflects the
+  // artist's chosen section when one is set.
   useEffect(() => {
     if (!fileId) { setHookAudioUrl(""); return; }
     let dead = false;
     let url = "";
-    fetch(`${API}/hookclip/${fileId}`)
+    const q = sectionStart != null ? `?start=${Math.round(sectionStart)}` : "";
+    fetch(`${API}/hookclip/${fileId}${q}`)
       .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("no clip"))))
       .then((b) => { if (!dead) { url = URL.createObjectURL(b); setHookAudioUrl(url); } })
       .catch(() => { if (!dead) setHookAudioUrl(""); });
     return () => { dead = true; if (url) URL.revokeObjectURL(url); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileId, hookStart]);
+  }, [fileId, hookStart, sectionStart]);
 
   // Persistent library of rendered lyric videos for this song (survives leaving
   // the page). Each can be deleted individually.
@@ -118,10 +126,25 @@ export default function App() {
   // is gone (e.g. after a redeploy). "{uid}/{file_id}" in the private tracks bucket.
   const audioKey = session?.user?.id && fileId ? `${session.user.id}/${fileId}` : "";
 
+  // Full track for the section scrubber — fetched as an authed blob (same reason
+  // as the hook clip: a native <audio src> can't carry the token).
+  useEffect(() => {
+    if (!fileId) { setTrackUrl(""); return; }
+    let dead = false;
+    let url = "";
+    fetch(`${API}/trackaudio/${fileId}?audio_key=${encodeURIComponent(audioKey)}`)
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error("no track"))))
+      .then((b) => { if (!dead) { url = URL.createObjectURL(b); setTrackUrl(url); } })
+      .catch(() => { if (!dead) setTrackUrl(""); });
+    return () => { dead = true; if (url) URL.revokeObjectURL(url); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId]);
+
   const fmtTime = (s: number) => {
     const total = (hookStart ?? 0) + s;
     return `${Math.floor(total / 60)}:${String(Math.floor(total % 60)).padStart(2, "0")}`;
   };
+  const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
   // 1 · auto-detect the sung words with exact timing
   const detect = async () => {
@@ -132,7 +155,7 @@ export default function App() {
       const res = await fetch(`${API}/detectlyrics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_id: fileId, audio_key: audioKey }),
+        body: JSON.stringify({ file_id: fileId, audio_key: audioKey, start: sectionStart ?? -1 }),
       });
       if (!res.ok) throw new Error("detection failed");
       const j = await res.json();
@@ -183,6 +206,7 @@ export default function App() {
       try { fd.append("style", localStorage.getItem("rollout_style") || "auto"); } catch { /* ignore */ }
       fd.append("font", font);
       fd.append("position", position);
+      fd.append("start", String(sectionStart ?? -1));
       if (audioFile) fd.append("file", audioFile);
       else { fd.append("file_id", fileId); fd.append("audio_key", audioKey); }
       const res = await fetch(`${API}/lyricvideo`, { method: "POST", body: fd });
@@ -270,6 +294,43 @@ export default function App() {
                     <Music className="size-4" />
                     {audioFile ? audioFile.name : "Choose the track (or re-import first)"}
                   </Button>
+                </div>
+              )}
+
+              {/* pick your section (optional — defaults to the auto hook) */}
+              {trackUrl && (
+                <div className="panel rounded-3xl p-5 flex flex-col gap-3">
+                  <span className="section-label">Pick your section (optional)</span>
+                  <audio
+                    ref={trackRef}
+                    controls
+                    src={trackUrl}
+                    onLoadedMetadata={(e) => setTrackDur((e.target as HTMLAudioElement).duration || 0)}
+                    className="w-full h-9"
+                  />
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => {
+                        const t = Math.max(0, Math.floor(trackRef.current?.currentTime ?? 0));
+                        const max = Math.max(0, Math.floor(trackDur - 15));
+                        setSectionStart(Math.min(t, max));
+                      }}
+                      className="rounded-xl h-9 px-4 gap-2"
+                    >
+                      <AudioLines className="size-3.5" /> Use this spot
+                    </Button>
+                    <span className="font-mono text-[11px] text-[#9A96AD]">
+                      {sectionStart == null
+                        ? "auto — Rollout picks the catchiest 15s"
+                        : `section ${clock(sectionStart)} → ${clock(sectionStart + 15)}`}
+                    </span>
+                    {sectionStart != null && (
+                      <button onClick={() => setSectionStart(null)} className="font-mono text-[11px] text-violet-400 hover:text-[#F2F0F7]">
+                        back to auto
+                      </button>
+                    )}
+                  </div>
+                  <span className="font-mono text-[10px] text-[#5E5A72]">Scrub to the part you want, hit “Use this spot” — detection and the video both use this window.</span>
                 </div>
               )}
 

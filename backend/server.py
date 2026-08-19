@@ -295,6 +295,7 @@ def revibe(req: ReVibeReq):
 class DetectReq(BaseModel):
     file_id: str
     audio_key: str = ""   # "{uid}/{file_id}" in the durable Storage bucket
+    start: float = -1     # artist-chosen section start (sec); < 0 = auto-find the hook
 
 
 # Strict key pattern (uid/filename) so a crafted audio_key can't traverse paths
@@ -333,9 +334,10 @@ def _ensure_audio(file_id: str, audio_key: str, authorization: str):
             pass
 
 
-def _hook_clip_path(file_id: str):
-    """Cut (and cache) the hook window of an uploaded track. Returns (None, 0.0)
-    for a missing/undecodable/crafted file_id so callers can 404 cleanly."""
+def _hook_clip_path(file_id: str, start=None):
+    """Cut (and cache) a 15s window of an uploaded track. `start` picks a specific
+    second to cut from (the artist's chosen section); None auto-finds the hook.
+    Returns (None, 0.0) for a missing/undecodable/crafted file_id so callers 404."""
     import librosa, soundfile as sf, json as _json
     from lyricvideo import find_hook, CLIP_SEC
     base = os.path.basename(file_id or "")
@@ -344,18 +346,25 @@ def _hook_clip_path(file_id: str):
     src = os.path.join(UPLOADS, base)
     if not os.path.isfile(src):  # isfile() also rejects a dir-resolving file_id
         return None, 0.0
-    clip_path = os.path.join(UPLOADS, f"hook_{base}.wav")
+    # Cache per chosen window ("auto" hook vs a specific artist-picked start), so
+    # switching sections doesn't fight one shared cached clip.
+    tag = f"s{int(round(float(start)))}" if start is not None else "auto"
+    clip_path = os.path.join(UPLOADS, f"hook_{tag}_{base}.wav")
     meta_path = clip_path + ".json"
     try:
         if os.path.exists(clip_path) and os.path.exists(meta_path):
             with open(meta_path) as mf:
                 return clip_path, _json.load(mf)["hook_start"]
         y, sr = librosa.load(src, mono=True, sr=44100)
-        start = find_hook(y, sr)
-        sf.write(clip_path, y[int(start * sr): int((start + CLIP_SEC) * sr)], sr)
+        if start is not None:
+            dur = len(y) / sr
+            st = max(0.0, min(float(start), max(0.0, dur - CLIP_SEC)))
+        else:
+            st = find_hook(y, sr)
+        sf.write(clip_path, y[int(st * sr): int((st + CLIP_SEC) * sr)], sr)
         with open(meta_path, "w") as mf:
-            _json.dump({"hook_start": round(start, 2)}, mf)
-        return clip_path, round(start, 2)
+            _json.dump({"hook_start": round(st, 2)}, mf)
+        return clip_path, round(st, 2)
     except Exception:
         return None, 0.0
 
@@ -366,7 +375,7 @@ def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
     The editor lets the artist fix any misheard word before rendering."""
     from align import detect_words
     _ensure_audio(req.file_id, req.audio_key, authorization)  # re-hydrate if the local copy is gone
-    clip, hook_start = _hook_clip_path(req.file_id)
+    clip, hook_start = _hook_clip_path(req.file_id, req.start if req.start >= 0 else None)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
     try:
@@ -394,9 +403,10 @@ def scanlyrics(req: DetectReq, authorization: str = Header(default="")):
 
 
 @app.get("/hookclip/{file_id}")
-def hookclip(file_id: str):
-    """Serve the hook audio so the artist can listen while correcting words."""
-    clip, _ = _hook_clip_path(file_id)
+def hookclip(file_id: str, start: float = -1):
+    """Serve a 15s window so the artist can listen. `start` picks their chosen
+    section; < 0 serves the auto-detected hook."""
+    clip, _ = _hook_clip_path(file_id, start if start >= 0 else None)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
     try:
@@ -404,6 +414,24 @@ def hookclip(file_id: str):
             return Response(content=f.read(), media_type="audio/wav")
     except OSError:
         return Response(status_code=404, content=b"clip unavailable")
+
+
+@app.get("/trackaudio/{file_id}")
+def trackaudio(file_id: str, audio_key: str = "", authorization: str = Header(default="")):
+    """Serve the FULL uploaded track so the artist can scrub it and pick the
+    section they want. Re-hydrates from durable Storage if the local copy is gone."""
+    import mimetypes
+    _ensure_audio(file_id, audio_key, authorization)
+    base = os.path.basename(file_id or "")
+    path = os.path.join(UPLOADS, base) if base else ""
+    if not path or not os.path.isfile(path):
+        return Response(status_code=404, content=b"unknown file_id")
+    try:
+        with open(path, "rb") as f:
+            return Response(content=f.read(),
+                            media_type=mimetypes.guess_type(base)[0] or "audio/mpeg")
+    except OSError:
+        return Response(status_code=404, content=b"track unavailable")
 
 
 class CorrectReq(BaseModel):
@@ -527,6 +555,7 @@ def lyric_video(
     audio_key: str = Form(""),
     font: str = Form("bold"),
     position: str = Form("center"),
+    start: float = Form(-1),   # artist-chosen section start (sec); < 0 = auto hook
     file: UploadFile | None = File(None),
     authorization: str = Header(default=""),
 ):
@@ -583,18 +612,18 @@ def lyric_video(
             try:
                 meta = make_lyric_video_premium(
                     audio_path, lyrics, cover_url, title, artist, out, words_override,
-                    bg=bg, moods=_moods, style=style)
+                    bg=bg, moods=_moods, style=style, start_override=(start if start >= 0 else None))
             except Exception as e:
                 print("premium engine fell back:", e)
-                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None))
         elif bg == "broll":
             # Moving vibe-matched footage background via the ffmpeg renderer. Any
             # failure (no clips, ffmpeg error) safely falls back to the cover render.
             try:
-                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position)
+                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position, start_override=(start if start >= 0 else None))
             except Exception as e:
                 print("b-roll fell back to cover:", e)
-                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
+                meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None))
         else:
             meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position)
         with open(out, "rb") as f:
@@ -634,6 +663,7 @@ def promo_clip(
     audio_key: str = Form(""),
     font: str = Form("bold"),
     bg: str = Form("broll"),
+    start: float = Form(-1),   # artist-chosen section start (sec); < 0 = auto hook
     file: UploadFile | None = File(None),
     authorization: str = Header(default=""),
 ):
@@ -672,7 +702,8 @@ def promo_clip(
     try:
         _moods = [m for m in moods.split(",") if m]
         meta = make_promo_clip(audio_path, title, artist, caption, out,
-                               cover=cover_url, moods=_moods, style=style, font=font, bg=bg)
+                               cover=cover_url, moods=_moods, style=style, font=font, bg=bg,
+                               start_override=(start if start >= 0 else None))
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:

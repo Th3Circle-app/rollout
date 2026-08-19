@@ -211,7 +211,7 @@ def _save_cover(cover, dest):
 
 
 def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
-                             words_override=None, bg="cover", moods=None, style=""):
+                             words_override=None, bg="cover", moods=None, style="", start_override=None):
     """Premium path: demucs + stable-ts word alignment + Remotion render.
 
     words_override: word list from the lyric editor — exact user-approved
@@ -222,7 +222,7 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
     from align import align_hook
 
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
-    start = find_hook(y, sr)
+    start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
 
     public = os.path.join(VIDEO_DIR, "public")
@@ -320,9 +320,9 @@ def make_lyric_video_premium(audio_path, lyrics, cover, title, artist, out_path,
     }
 
 
-def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="bold", position="center"):
+def make_lyric_video(audio_path, lyrics, cover, title, artist, out_path, font="bold", position="center", start_override=None):
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
-    start = find_hook(y, sr)
+    start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
 
     # beat grid inside the clip
@@ -437,12 +437,12 @@ def _broll_bg_video(style, moods, tmpdir):
     return bgv
 
 
-def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=None, style="", font="bold", position="center"):
+def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=None, style="", font="bold", position="center", start_override=None):
     """Same beat-synced kinetic type as the classic renderer, but over MOVING
     vibe-matched stock footage instead of the static cover. ffmpeg overlays the
     transparent text frames (+ a readability scrim) onto the b-roll video."""
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
-    start = find_hook(y, sr)
+    start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
     tempo, beat_frames = librosa.beat.beat_track(y=clip, sr=sr)
     beats = list(librosa.frames_to_time(beat_frames, sr=sr))
@@ -513,13 +513,13 @@ def make_lyric_video_broll(audio_path, lyrics, title, artist, out_path, moods=No
 
 
 def make_promo_clip(audio_path, title, artist, caption, out_path,
-                    cover="", moods=None, style="", font="bold", bg="broll"):
+                    cover="", moods=None, style="", font="bold", bg="broll", start_override=None):
     """A shareable vertical promo teaser (TikTok/Reels/Shorts): the song's hook
     over vibe-matched b-roll (or a slow push on the cover), with a punchy
     headline sequence — title, artist, then a call-to-action. No lyrics needed;
     reuses find_hook, the b-roll builder, and render_text_card."""
     y, sr = librosa.load(audio_path, mono=True, sr=44100)
-    start = find_hook(y, sr)
+    start = float(start_override) if start_override is not None else find_hook(y, sr)
     clip = y[int(start * sr): int((start + CLIP_SEC) * sr)]
 
     # headline sequence — a promo reads slower than lyrics, so hold each line
