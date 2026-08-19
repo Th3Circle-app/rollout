@@ -7,6 +7,26 @@ import { supabase } from "@/lib/supabase";
 
 import { API_BASE as API } from "@/lib/api";
 
+// Generic preset avatars for artists who don't want to upload a personal photo.
+// Rendered as inline SVG gradient data-URIs (no upload, no storage) and stored
+// straight into avatar_url, so they render everywhere a photo would.
+const AVATAR_GRADS: [string, string][] = [
+  ["#7c3aed", "#4f46e5"], ["#2563eb", "#06b6d4"], ["#059669", "#0d9488"],
+  ["#db2777", "#7c3aed"], ["#f59e0b", "#ef4444"], ["#0ea5e9", "#6366f1"],
+  ["#ec4899", "#f43f5e"], ["#f97316", "#eab308"],
+];
+const presetAvatar = (a: string, b: string) =>
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>` +
+      `<rect width="128" height="128" fill="url(#g)"/>` +
+      `<circle cx="44" cy="38" r="54" fill="rgba(255,255,255,0.14)"/>` +
+    `</svg>`
+  );
+const PRESET_AVATARS = AVATAR_GRADS.map(([a, b]) => presetAvatar(a, b));
+
 // BYO image providers — the artist's key, their bill, our $0.
 // "free" group = the key itself costs nothing (free API tiers).
 const IMG_PROVIDERS = [
@@ -145,38 +165,60 @@ export default function App() {
 
         {/* profile picture */}
         {cloud && session && (
-          <div className="panel rounded-3xl p-6 flex items-center gap-5">
-            <div className="size-16 shrink-0 overflow-hidden rounded-full bg-[#1E1E28] border border-white/8 flex items-center justify-center">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
-              ) : (
-                <span className="font-medium text-[#9A96AD] text-lg">{initials}</span>
-              )}
-            </div>
-            <div className="flex flex-col gap-2">
-              <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Profile picture</span>
-              <div className="flex items-center gap-3">
-                <label className="btn-primary inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white">
-                  {avatarBusy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-                  {avatarUrl ? "Change photo" : "Upload photo"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) pickAvatar(f); e.currentTarget.value = ""; }}
-                  />
-                </label>
-                {avatarUrl && (
-                  <button onClick={() => updateAvatar("")} className="text-xs text-[#9A96AD] hover:text-[#F2F0F7] transition-colors">
-                    Remove
-                  </button>
+          <div className="panel rounded-3xl p-6 flex flex-col gap-5">
+            <div className="flex items-center gap-5">
+              <div className="size-16 shrink-0 overflow-hidden rounded-full bg-[#1E1E28] border border-white/8 flex items-center justify-center">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Profile" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="font-medium text-[#9A96AD] text-lg">{initials}</span>
                 )}
               </div>
-              {avatarErr ? (
-                <span className="text-xs text-red-400">{avatarErr}</span>
-              ) : (
-                <span className="font-mono text-[11px] text-[#5E5A72]">JPG or PNG, up to 5MB.</span>
-              )}
+              <div className="flex flex-col gap-2">
+                <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Profile picture</span>
+                <div className="flex items-center gap-3">
+                  <label className="btn-primary inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white">
+                    {avatarBusy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                    {avatarUrl ? "Change photo" : "Upload photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) pickAvatar(f); e.currentTarget.value = ""; }}
+                    />
+                  </label>
+                  {avatarUrl && (
+                    <button onClick={() => updateAvatar("")} className="text-xs text-[#9A96AD] hover:text-[#F2F0F7] transition-colors">
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {avatarErr ? (
+                  <span className="text-xs text-red-400">{avatarErr}</span>
+                ) : (
+                  <span className="font-mono text-[11px] text-[#5E5A72]">JPG or PNG, up to 5MB.</span>
+                )}
+              </div>
+            </div>
+
+            {/* generic presets — pick one instead of uploading a personal photo */}
+            <div className="flex flex-col gap-2.5 border-t border-white/8 pt-4">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-[#5E5A72]">Or pick a preset</span>
+              <div className="flex flex-wrap gap-2.5">
+                {PRESET_AVATARS.map((src, i) => (
+                  <button
+                    key={i}
+                    onClick={() => updateAvatar(src)}
+                    aria-label={`Preset avatar ${i + 1}`}
+                    className={
+                      "size-10 overflow-hidden rounded-full border-2 transition-transform hover:scale-110 " +
+                      (avatarUrl === src ? "border-violet-400" : "border-transparent hover:border-white/25")
+                    }
+                  >
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
