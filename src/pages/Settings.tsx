@@ -81,8 +81,19 @@ export default function App() {
   // then sign out and drop to the landing with a clean local slate.
   const deleteAccount = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
-    if (!supabase) return;
+    if (!supabase || !session) return;
     setDeleting(true);
+    const uid = session.user.id;
+    // Remove the user's uploaded files from every bucket (owner-scoped delete)
+    // so nothing is left behind — no orphaned audio or avatars.
+    for (const bucket of ["tracks", "rollout", "avatars"]) {
+      try {
+        const { data } = await supabase.storage.from(bucket).list(uid, { limit: 1000 });
+        if (data && data.length) {
+          await supabase.storage.from(bucket).remove(data.map((f) => `${uid}/${f.name}`));
+        }
+      } catch { /* best-effort */ }
+    }
     try { await supabase.rpc("rollout_delete_account"); } catch { /* still sign out below */ }
     try { await supabase.auth.signOut(); } catch { /* ignore */ }
     try { localStorage.clear(); } catch { /* ignore */ }
@@ -531,7 +542,10 @@ export default function App() {
           </div>
           <div className="border-white/8 border-t-1 border-r-0 border-b-0 border-l-0 border-solid pt-4 flex flex-col gap-1">
             <span className="font-mono text-[#5E5A72] text-xs leading-4">Rollout v0.1.0 · a Th3Circle product</span>
-            <span className="font-mono text-[#5E5A72] text-xs leading-4">Terms &amp; privacy ship with the public launch.</span>
+            <div className="flex gap-4">
+              <a href="/legal/privacy.html" target="_blank" rel="noreferrer" className="font-mono text-[#9A96AD] text-xs leading-4 hover:text-[#F2F0F7]">Privacy Policy</a>
+              <a href="/legal/terms.html" target="_blank" rel="noreferrer" className="font-mono text-[#9A96AD] text-xs leading-4 hover:text-[#F2F0F7]">Terms of Service</a>
+            </div>
           </div>
         </div>
       </div>

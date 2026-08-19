@@ -507,6 +507,8 @@ export default function RolloutLanding({ onStart }: { onStart: () => void }) {
           <div className="flex items-center gap-6 font-mono text-[11px] text-[#5E5A72]">
             <button onClick={onStart} className="transition-colors hover:text-[#9A96AD]">Sign in</button>
             <a href="/blog/" className="transition-colors hover:text-[#9A96AD]">Blog</a>
+            <a href="/legal/privacy.html" className="transition-colors hover:text-[#9A96AD]">Privacy</a>
+            <a href="/legal/terms.html" className="transition-colors hover:text-[#9A96AD]">Terms</a>
             <a href="https://th3circle.app" target="_blank" rel="noopener" className="transition-colors hover:text-[#9A96AD]">Th3Circle</a>
           </div>
         </div>

@@ -4,6 +4,12 @@ import { useStore } from "@/store";
 
 type Msg = { from: "bot" | "you"; text: string };
 
+// Crisis-language safeguard: if a message signals self-harm, respond with
+// resources rather than routing it as a support ticket (we're not a crisis line).
+const SELF_HARM_RE = /\b(suicid\w*|kill (myself|me)|end (my|it all)|self[-\s]?harm|hurt (myself|me)|want to die|don'?t want to (live|be here)|take my (own )?life)\b/i;
+const CRISIS_MSG =
+  "It sounds like you may be going through something really hard, and you're not alone. If you're in crisis, please reach out right now: in the US call or text 988 (Suicide & Crisis Lifeline), or text HOME to 741741. If you're in immediate danger, call 911 or your local emergency number.";
+
 // Floating support chat. Messages email support@xkaii.com via the Netlify
 // function (Resend), with the user's address as reply-to so we can answer them.
 export default function SupportChat() {
@@ -19,6 +25,11 @@ export default function SupportChat() {
   const send = async () => {
     const text = input.trim();
     if (!text || sending) return;
+    if (SELF_HARM_RE.test(text)) {
+      setMsgs((m) => [...m, { from: "you", text }, { from: "bot", text: CRISIS_MSG }]);
+      setInput("");
+      return;
+    }
     if (!email.trim()) {
       setMsgs((m) => [...m, { from: "bot", text: "What's the best email to reach you at? Add it above and resend." }]);
       return;

@@ -27,6 +27,7 @@ import StarField from "./components/StarField";
 import RolloutLanding from "./components/RolloutLanding";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SupportChat from "./components/SupportChat";
+import CookieConsent from "./components/CookieConsent";
 
 // Fallback when a page component throws — recover instead of blanking the app.
 function PageError() {
@@ -173,6 +174,7 @@ export default function App() {
       <TourProvider>
         <Shell />
       </TourProvider>
+      <CookieConsent />
     </StoreProvider>
   );
 }
