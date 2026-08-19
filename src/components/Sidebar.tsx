@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, Gift, Layers, Library, Package, Settings, Sparkles, Upload, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Gift, Layers, Library, LogOut, Package, Settings, Sparkles, Upload, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStore } from "@/store";
 
@@ -33,7 +33,7 @@ const NAV: { label: string; icon: typeof Upload; target: string; group: string[]
 ];
 
 export default function Sidebar() {
-  const { page, go, release, plan, openUpgrade, avatarUrl, isAdmin } = useStore();
+  const { page, go, release, plan, openUpgrade, avatarUrl, isAdmin, signOut } = useStore();
   const initials = (release?.artist || "R").slice(0, 2).toUpperCase();
   const planLabel = plan === "studio" ? "Studio" : plan === "artist" ? "Artist" : "Free";
 
@@ -104,7 +104,7 @@ export default function Sidebar() {
             <Sparkles className="size-3.5" /> {planLabel} plan
           </button>
         )}
-        <div className="border-white/8 border-t-1 border-r-0 border-b-0 border-l-0 border-solid flex pt-6 justify-center items-center w-full">
+        <div className="border-white/8 border-t-1 border-r-0 border-b-0 border-l-0 border-solid flex pt-6 justify-between items-center w-full">
           <button
             onClick={() => go("Settings")}
             aria-label="Account settings"
@@ -115,6 +115,14 @@ export default function Sidebar() {
             ) : (
               <span className="font-medium text-[#9A96AD] text-xs leading-4">{initials}</span>
             )}
+          </button>
+          <button
+            onClick={signOut}
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex size-8 items-center justify-center rounded-full text-[#9A96AD] transition-colors hover:bg-white/[0.06] hover:text-white"
+          >
+            <LogOut className="size-4" />
           </button>
         </div>
       </div>
