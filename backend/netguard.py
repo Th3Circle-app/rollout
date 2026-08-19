@@ -127,7 +127,14 @@ def post_json(url: str, body: bytes, headers: dict | None = None,
         conn.request("POST", path, body=body, headers=hdrs)
         resp = conn.getresponse()
         if resp.status >= 300:
-            raise ValueError(f"post failed: HTTP {resp.status}")
+            # Surface the provider's own explanation (quota/billing/bad-key detail)
+            # instead of a bare status — otherwise every failure looks identical.
+            detail = ""
+            try:
+                detail = resp.read(2048).decode("utf-8", "replace").strip().replace("\n", " ")
+            except Exception:
+                pass
+            raise ValueError(f"post failed: HTTP {resp.status}{(' — ' + detail) if detail else ''}")
         return resp.read(max_bytes + 1)[:max_bytes]
     finally:
         conn.close()

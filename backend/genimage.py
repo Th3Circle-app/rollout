@@ -170,18 +170,36 @@ def gen_gemini(prompt, key, seed=0, size=1024, model="", image_b64=""):
         )})
     else:
         parts.append({"text": f"Generate an image: {prompt}"})
-    j = _post_json(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{slug}:generateContent?key={key}",
-        {"contents": [{"parts": parts}]},
-        {},
-        timeout=300,
-    )
-    for cand in j.get("candidates", []):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{slug}:generateContent?key={key}"
+    body = {
+        "contents": [{"parts": parts}],
+        # gemini-2.5-flash-image must be told to return an image, not text.
+        "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+    }
+    j = None
+    # The free image tier is a few requests/minute — a burst 429 is common on the
+    # very first click. Retry once after a short wait before giving up.
+    for attempt in range(2):
+        try:
+            j = _post_json(url, body, {}, timeout=300)
+            break
+        except ValueError as e:
+            if "429" in str(e) and attempt == 0:
+                time.sleep(4)
+                continue
+            if "429" in str(e):
+                raise RuntimeError(
+                    "Google rate-limited this key (429). The free Gemini image tier "
+                    "allows only a few generations per minute. Wait ~30 seconds and try "
+                    "again, or enable billing in Google AI Studio for higher limits."
+                )
+            raise
+    for cand in (j or {}).get("candidates", []):
         for part in cand.get("content", {}).get("parts", []):
             data = part.get("inlineData", {}).get("data")
             if data:
                 return base64.b64decode(data)
-    raise RuntimeError("Gemini returned no image (model may need image output enabled)")
+    raise RuntimeError("Gemini returned no image (the free tier may not have image output enabled on this key)")
 
 
 def gen_hf(prompt, key, seed=0, size=1024, model=""):
