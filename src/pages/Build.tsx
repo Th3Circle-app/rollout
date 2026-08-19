@@ -117,7 +117,7 @@ export default function App() {
   const title = allDone ? "Your rollout is ready." : "Building your rollout.";
   const sub = allDone
     ? `Rollout finished generating the release kit for ${r.filename}.`
-    : "Rollout is generating your release kit — this takes about a minute.";
+    : "Generating your release kit. Give it about a minute.";
 
   return (
     <div className="min-h-screen flex flex-col flex-1">

@@ -97,7 +97,7 @@ export default function Library() {
         <div className="flex flex-col gap-1">
           <h1 className="page-title text-[40px]">Library</h1>
           <p className="text-[#9A96AD] text-sm leading-5">
-            Every release you've built. Pick one up where you left off.
+            Your discography. Every release you've made, in one place.
           </p>
         </div>
         <Button onClick={() => go("Import")} className="btn-primary rounded-xl text-white h-11 gap-2">
@@ -118,9 +118,9 @@ export default function Library() {
               <Upload className="size-6 text-[#5E5A72]" />
             </div>
             <div className="flex flex-col gap-1">
-              <h2 className="font-bold text-[#F2F0F7] text-xl">Nothing here yet</h2>
+              <h2 className="font-bold text-[#F2F0F7] text-xl">No releases yet</h2>
               <p className="max-w-xs text-[#9A96AD] text-sm leading-6">
-                Import a finished song and Rollout builds the whole release. It shows up here so you can come back and edit anytime.
+                Drop a track to start your first release. It lives here for you to pick back up anytime.
               </p>
             </div>
             <Button onClick={() => go("Import")} className="btn-primary rounded-xl text-white h-11 gap-2">

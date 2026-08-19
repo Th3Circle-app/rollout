@@ -207,7 +207,7 @@ export default function App() {
           </span>
         ) : (
           <span className="text-[#5E5A72] text-sm leading-5">
-            {dateLabel ? `Lock in ${dateLabel} and Rollout lines up your launch-day plan.` : "Pick a date to schedule the release."}
+            {dateLabel ? `Lock in ${dateLabel} and your launch-day plan is set.` : "Pick a date to schedule the release."}
           </span>
         )}
       </div>

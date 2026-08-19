@@ -24,7 +24,6 @@ import { API_BASE } from "./lib/api";
 import FanPage from "./pages/FanPage";
 import GlassBackground from "./components/GlassBackground";
 import StarField from "./components/StarField";
-import SmokeField from "./components/SmokeField";
 import RolloutLanding from "./components/RolloutLanding";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -112,14 +111,21 @@ function Shell() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Dev-only design preview: ?preview=1 renders the studio with each page's demo
+  // fallback data so the UI can be screenshotted without a login. Gated to
+  // import.meta.env.DEV so it can NEVER bypass auth in the deployed build.
+  const preview = import.meta.env.DEV &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "1";
+
   // logged out: the marketing landing is the front door; "Start free" opens the
   // auth wall. (The landing is responsive and shows on phones too — only the
   // studio itself is desktop-gated below.)
-  if (cloud && !session) {
+  if (cloud && !session && !preview) {
     return showAuth ? <Auth onBack={() => setShowAuth(false)} /> : <RolloutLanding onStart={() => setShowAuth(true)} />;
   }
 
-  if (tooSmall) {
+  if (tooSmall && !preview) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#0B0B0F] px-8 text-center">
         <div className="size-12 rounded-xl bg-violet-500 flex items-center justify-center">
@@ -137,8 +143,8 @@ function Shell() {
 
   return (
     <div className="app-bg relative flex min-h-screen text-neutral-50">
-      <GlassBackground style={{ opacity: 0.45 }} />
-      <SmokeField />
+      <GlassBackground style={{ background: "#060609" }} />
+      <div aria-hidden className="studio-atmo" />
       <StarField />
       <div className="relative z-10 flex min-h-screen w-full">
         <Sidebar />

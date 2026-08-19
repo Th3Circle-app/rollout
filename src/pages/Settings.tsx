@@ -137,10 +137,10 @@ export default function App() {
           {engineUp === null ? "checking engine…" : engineUp ? "engine online" : "engine offline"}
         </div>
       </div>
-      <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-col gap-8 max-w-[720px]">
+      <div className="mx-auto flex w-full px-6 xl:px-12 pt-6 pb-12 flex-col gap-8 max-w-[860px]">
         <div className="flex flex-col gap-2">
           <h1 className="page-title text-[38px]">Settings</h1>
-          <p className="text-[#9A96AD] text-sm leading-5">Your plan, usage, and engine status.</p>
+          <p className="text-[#9A96AD] text-sm leading-5">Plan, account, and your AI setup.</p>
         </div>
 
         {/* profile picture */}
@@ -254,7 +254,7 @@ export default function App() {
           <div className="panel rounded-3xl p-6 flex flex-col gap-4">
             <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Password</span>
             <p className="text-[#9A96AD] text-sm leading-5">
-              Set a password so you can sign in with your email on any device — useful if you normally use the Google button.
+              Set a password to sign in with your email on any device.
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <input
@@ -310,10 +310,9 @@ export default function App() {
           </div>
           <div className="-mt-2 flex flex-col gap-2">
             <p className="text-[#9A96AD] text-sm leading-5">
-              Cover art uses a <span className="text-[#F2F0F7]">free shared generator</span> by default. It works,
-              but it's best-effort and can get busy at peak times. For <span className="text-[#F2F0F7]">instant,
-              unlimited covers</span>, connect your own free key below — it runs on your account, your key is never
-              stored, and Rollout still auto-falls-back to the built-in if a provider ever hiccups.
+              The built-in generator is free but shared, so it can queue at peak times. Add your own key for
+              <span className="text-[#F2F0F7]"> instant, unlimited covers</span>. It stays on your device, never leaves it,
+              and the built-in covers you if a provider ever drops.
             </p>
             <div className="rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-2.5">
               <span className="font-mono text-[10px] uppercase tracking-wider text-violet-300">Free options</span>

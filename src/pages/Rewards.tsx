@@ -68,14 +68,14 @@ export default function Rewards() {
 
   return (
     <div className="min-h-screen flex flex-col flex-1">
-      <div className="flex px-6 xl:px-12 pt-8 pb-4 flex-col gap-1">
+      <div className="mx-auto flex w-full max-w-[880px] px-6 xl:px-12 pt-8 pb-4 flex-col gap-1">
         <h1 className="page-title text-[40px]">Rewards</h1>
         <p className="text-[#9A96AD] text-sm leading-5">
-          The longer you build with Rollout, the more you unlock.
+          Stick around, get rewarded. Perks unlock the longer you're a member.
         </p>
       </div>
 
-      <div className="flex px-6 xl:px-12 pb-12 flex-1 flex-col gap-6 max-w-[880px]">
+      <div className="mx-auto flex w-full px-6 xl:px-12 pb-12 flex-1 flex-col gap-6 max-w-[880px]">
         {/* streak header */}
         <div className="panel rounded-3xl p-6 flex items-center gap-6">
           <div className="relative size-20 shrink-0 rounded-full flex items-center justify-center"
@@ -103,7 +103,7 @@ export default function Rewards() {
         {!isPaid && (
           <div className="rounded-xl border border-violet-400/40 bg-violet-500/[0.06] p-4 flex items-center justify-between gap-4">
             <span className="text-sm text-[#F2F0F7]">
-              Rewards grow while you're subscribed. Start your streak with a plan.
+              Your streak builds while you're subscribed. Pick a plan to start it.
             </span>
             <a href="?page=Settings" className="shrink-0 btn-primary rounded-xl px-4 py-2 text-sm font-semibold text-white">
               See plans

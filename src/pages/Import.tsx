@@ -132,9 +132,9 @@ export default function App() {
 
           <div className="flex px-6 xl:px-12 pb-16 flex-col justify-center items-center flex-1">
             <div className="hero-glow max-w-[720px] text-center flex mb-10 flex-col items-center gap-4 w-full">
-              <span className="kicker kicker-center relative z-10">New Release</span>
-              <h1 className="page-title relative z-10 text-[52px]">Start a release.</h1>
-              <p className="relative z-10 text-[#9A96AD] text-[17px] leading-7">Drop a finished track. Rollout reads it and builds the rest.</p>
+              <span className="kicker kicker-center relative z-10">New release</span>
+              <h1 className="page-title relative z-10 text-[52px]">Drop the record.</h1>
+              <p className="relative z-10 text-[#9A96AD] text-[17px] leading-7">One finished track in. A full release out.</p>
             </div>
 
             <input ref={fileRef} type="file" accept="audio/*" className="hidden" onChange={onPick} />
@@ -295,7 +295,7 @@ export default function App() {
                 }}
                 className="btn-primary font-semibold rounded-xl text-white text-sm leading-5 p-6 gap-2 disabled:opacity-40 disabled:shadow-none"
               >
-                Build my rollout <ArrowRight className="size-4" />
+                Build the release <ArrowRight className="size-4" />
               </Button>
               <Button variant="ghost" onClick={() => fileRef.current?.click()} className="font-medium rounded-xl text-[#9A96AD] text-sm leading-5 p-6">
                 {status === "idle" ? "Browse files" : "Choose a different file"}

@@ -64,11 +64,11 @@ export default function Sidebar() {
               onClick={() => go(n.target)}
               className={
                 active
-                  ? "bg-[#1E1E28] text-[#F2F0F7] px-3 py-2 justify-start gap-3 w-full"
-                  : "text-[#9A96AD] px-3 py-2 justify-start gap-3 w-full hover:text-[#F2F0F7]"
+                  ? "bg-gradient-to-r from-violet-500/[0.18] to-transparent text-white rounded-lg px-3 py-2 justify-start gap-3 w-full"
+                  : "text-[#9A96AD] rounded-lg px-3 py-2 justify-start gap-3 w-full hover:text-white hover:bg-white/[0.04]"
               }
             >
-              <Icon className={active ? "size-4 text-violet-500" : "size-4"} />
+              <Icon className={active ? "size-4 text-violet-400" : "size-4"} />
               <span className="font-medium text-sm leading-5">{n.label}</span>
             </Button>
           );
@@ -79,11 +79,11 @@ export default function Sidebar() {
             onClick={() => go("Admin")}
             className={
               page === "Admin"
-                ? "bg-[#1E1E28] text-[#F2F0F7] px-3 py-2 justify-start gap-3 w-full"
-                : "text-[#9A96AD] px-3 py-2 justify-start gap-3 w-full hover:text-[#F2F0F7]"
+                ? "bg-gradient-to-r from-violet-500/[0.18] to-transparent text-white rounded-lg px-3 py-2 justify-start gap-3 w-full"
+                : "text-[#9A96AD] rounded-lg px-3 py-2 justify-start gap-3 w-full hover:text-white hover:bg-white/[0.04]"
             }
           >
-            <BarChart3 className={page === "Admin" ? "size-4 text-violet-500" : "size-4"} />
+            <BarChart3 className={page === "Admin" ? "size-4 text-violet-400" : "size-4"} />
             <span className="font-medium text-sm leading-5">Metrics</span>
           </Button>
         )}

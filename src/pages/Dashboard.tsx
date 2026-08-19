@@ -1,6 +1,5 @@
-import { Check } from "lucide-react";
+import { ArrowRight, Calendar, Check, Clapperboard, Film, Globe, Image as ImageIcon, Play, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { useStore } from "@/store";
 
 function fmtDate(d: string) {
@@ -18,12 +17,12 @@ export default function App() {
     moods: ["emotional", "moody", "driving"], keywords: [], coverUrl: "", lyrics: "",
   };
 
-  // real readiness — each flag is actual product state
   let submitted = false;
   try {
     const k = `rollout_dist_${(r.artist + "-" + r.title).toLowerCase().replace(/\s+/g, "-")}`;
     submitted = Boolean(JSON.parse(localStorage.getItem(k) || "null")?.submittedAt);
   } catch { /* ignore */ }
+
   const lyricVideoDone = Boolean((r as { lyricVideoDone?: boolean }).lyricVideoDone);
   const pagePublished = Boolean((r as { pagePublished?: boolean }).pagePublished);
   const pageReady = pagePublished || Boolean(streamingLink);
@@ -33,170 +32,113 @@ export default function App() {
     ? Math.max(0, Math.ceil((new Date(releaseDate).getTime() - Date.now()) / 86400000))
     : null;
 
-  const linkLive = Boolean(streamingLink);
-
-  const ASSETS: {
-    label: string; sub?: string; page: string; ready: boolean; readyLabel?: string; img?: string; wide?: boolean; ai?: boolean;
-  }[] = [
-    { label: "Cover Art", page: "Cover", ready: Boolean(r.coverUrl), img: r.coverUrl, ai: true },
-    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, readyLabel: lyricVideoDone ? "Ready" : r.lyrics ? "Make video" : "Needs lyrics", ai: true },
-    { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: false, readyLabel: "Make a clip", ai: true },
-    { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), readyLabel: releaseDate ? "Ready" : "Set a date" },
-    { label: "Distribution", page: "Distribute", ready: submitted, readyLabel: submitted ? "Submitted" : "Needs review" },
-    { label: "Release Page", page: "Landing", ready: pageReady, readyLabel: pageReady ? "Ready" : "Needs review", wide: true },
+  const ASSETS: { label: string; sub: string; page: string; ready: boolean; status: string; img?: string; grad: string; icon: typeof ImageIcon }[] = [
+    { label: "Cover Art", sub: "3000 × 3000 artwork", page: "Cover", ready: Boolean(r.coverUrl), status: r.coverUrl ? "Ready" : "Create", img: r.coverUrl, grad: "linear-gradient(135deg,#7c3aed,#4f46e5)", icon: ImageIcon },
+    { label: "Lyric Video", sub: "15s vertical clip", page: "Lyrics", ready: lyricVideoDone, status: lyricVideoDone ? "Ready" : "Create", grad: "linear-gradient(135deg,#4f46e5,#0ea5e9)", icon: Clapperboard },
+    { label: "Promo Clip", sub: "TikTok / Reels teaser", page: "Promo", ready: false, status: "Create", grad: "linear-gradient(135deg,#db2777,#7c3aed)", icon: Film },
+    { label: "Release Plan", sub: "calendar + captions", page: "Plan", ready: Boolean(releaseDate), status: releaseDate ? "Ready" : "Set date", grad: "linear-gradient(135deg,#059669,#0d9488)", icon: Calendar },
+    { label: "Distribution", sub: "to every platform", page: "Distribute", ready: submitted, status: submitted ? "Sent" : "Send", grad: "linear-gradient(135deg,#2563eb,#06b6d4)", icon: Share2 },
+    { label: "Release Page", sub: "the fan smart-link", page: "Landing", ready: pageReady, status: pageReady ? "Live" : "Build", grad: "linear-gradient(135deg,#f59e0b,#ef4444)", icon: Globe },
   ];
 
-  const Chip = ({ ok, label }: { ok: boolean; label?: string }) => (
-    <span className={
-      "font-medium rounded-full text-[10px] px-2 py-0.5 " +
-      (ok ? "bg-[#46E0A8]/10 text-[#46E0A8]" : "bg-[#F0A45B]/10 text-[#F0A45B]")
-    }>
-      {label || (ok ? "Ready" : "Needs review")}
-    </span>
-  );
+  const firstTodo = ASSETS.find((a) => !a.ready)?.page ?? "Ship";
 
   return (
-    <div className="min-h-screen flex flex-col flex-1">
-      <div className="flex px-6 xl:px-12 pt-8 justify-end">
-        <div className="font-mono rounded-full bg-[#15151C] text-[#9A96AD] text-xs leading-4 border-white/8 border-1 border-solid px-3 py-1.5">
-          {r.key} · {r.bpm} BPM · {r.duration}
+    <div className="min-h-screen">
+      {/* album header — gradient wash + big artwork, like a streaming album page */}
+      <div className="relative">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[380px]"
+          style={{ background: "linear-gradient(180deg, rgba(124,58,237,0.2), rgba(124,58,237,0.03) 46%, rgba(11,11,15,0) 92%)" }}
+        />
+        <div className="relative px-8 pt-16 pb-8 xl:px-14">
+          <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-end">
+            <div
+              className="size-[200px] shrink-0 overflow-hidden rounded-2xl"
+              style={{ boxShadow: "0 30px 60px -18px rgba(0,0,0,0.85)" }}
+            >
+              {r.coverUrl ? (
+                <img alt={`${r.title} cover`} referrerPolicy="no-referrer" className="h-full w-full object-cover" src={r.coverUrl} />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center" style={{ background: "linear-gradient(135deg,#7c3aed,#4f46e5)" }}>
+                  <ImageIcon className="size-9 text-white/70" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-3 pb-1">
+              <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/75">Single</span>
+              <h1 className="text-5xl font-extrabold leading-[0.98] tracking-tight text-white sm:text-7xl">{r.title}</h1>
+              <div className="flex flex-wrap items-center gap-2 text-[14px] text-[#cfcadb]">
+                <span className="font-semibold text-white">{r.artist}</span>
+                <span className="text-white/40">•</span><span>{r.key}</span>
+                <span className="text-white/40">•</span><span>{r.bpm} BPM</span>
+                <span className="text-white/40">•</span><span>{r.duration}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-4">
+                <Button onClick={() => go(firstTodo)} className="h-11 gap-2 rounded-full bg-white px-6 font-bold text-black hover:bg-white/90">
+                  <Play className="size-4 fill-black" /> Continue release
+                </Button>
+                <div className="flex items-center gap-2.5">
+                  <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/12">
+                    <div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[13px] font-medium text-[#cfcadb]">{pct}% ready</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div className="flex px-6 xl:px-12 pt-6 pb-12 flex-1 gap-8">
-        <div className="max-w-[820px] flex flex-col flex-1 gap-8">
-          {/* header */}
-          <div className="border-white/8 border-t-0 border-r-0 border-b-1 border-l-0 border-solid flex pb-8 justify-between items-center">
-            <div className="flex items-center gap-5">
-              <div className="size-16 shrink-0 rounded-xl bg-[#1E1E28] border-white/8 border-1 border-solid overflow-hidden">
-                {r.coverUrl ? (
-                  <img alt={`${r.title} cover art thumbnail`} referrerPolicy="no-referrer" className="object-cover w-full h-full" src={r.coverUrl} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center font-mono text-[10px] text-[#5E5A72]">no art</div>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <h1 className="page-title text-[40px]">{r.title}</h1>
-                <p className="text-[#9A96AD] text-sm leading-5">{r.artist}</p>
-                <div className="flex mt-1 items-center gap-3">
-                  <div className="flex items-end gap-0.5 h-4">
-                    <div className="rounded-full bg-violet-500/60 w-0.5 h-2" />
-                    <div className="rounded-full bg-violet-500/70 w-0.5 h-3" />
-                    <div className="rounded-full bg-violet-500 w-0.5 h-4" />
-                    <div className="rounded-full bg-violet-500/50 w-0.5 h-2" />
-                    <div className="rounded-full bg-violet-500/70 w-0.5 h-3" />
-                    <div className="rounded-full bg-violet-500/40 w-0.5 h-1" />
-                    <div className="rounded-full bg-violet-500/60 w-0.5 h-3" />
-                  </div>
-                  <span className="font-mono text-[#9A96AD] text-xs leading-4">
-                    {r.key.toUpperCase()} · {r.bpm} BPM · {r.duration}
+
+      {/* release kit — imagery-forward tiles */}
+      <div className="px-8 pb-16 xl:px-14">
+        <div className="mb-5 flex items-baseline justify-between">
+          <h2 className="text-[19px] font-bold text-white">Your release kit</h2>
+          <span className="text-[13px] text-[#8b879a]">
+            {releaseDate ? `${daysToGo} days to release` : "no release date set"}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {ASSETS.map((a) => {
+            const Icon = a.icon;
+            return (
+              <button
+                key={a.label}
+                onClick={() => go(a.page)}
+                className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.05] text-left backdrop-blur-xl transition-all hover:-translate-y-1 hover:border-white/20"
+                style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14), 0 20px 44px -24px rgba(0,0,0,0.85)" }}
+              >
+                <div className="relative aspect-[16/10] overflow-hidden">
+                  {a.img ? (
+                    <img src={a.img} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />
+                  ) : (
+                    <div
+                      className="flex h-full w-full items-center justify-center transition-transform duration-500 group-hover:scale-[1.04]"
+                      style={{ background: "radial-gradient(130% 120% at 50% -10%, rgba(124,58,237,0.16), rgba(124,58,237,0) 58%), #101014" }}
+                    >
+                      <Icon className="size-7 text-white/40" />
+                    </div>
+                  )}
+                  <span
+                    className={
+                      "absolute right-3 top-3 rounded-full px-2.5 py-1 text-[11px] font-semibold backdrop-blur " +
+                      (a.ready ? "bg-black/45 text-[#5ce6a8]" : "bg-black/45 text-white/90")
+                    }
+                  >
+                    {a.ready && <Check className="mr-1 inline size-3 align-[-1px]" />}
+                    {a.status}
                   </span>
                 </div>
-              </div>
-            </div>
-            <div className="shrink-0 flex flex-col items-center gap-2">
-              <div
-                className="relative size-16 rounded-full flex justify-center items-center"
-                style={{ background: `conic-gradient(#8B5CF6 0deg, #8B5CF6 ${pct * 3.6}deg, rgba(255,255,255,0.08) ${pct * 3.6}deg, rgba(255,255,255,0.08) 360deg)` }}
-              >
-                <div className="size-12 rounded-full bg-[#0B0B0F] flex justify-center items-center">
-                  <span className="font-mono font-semibold text-[#F2F0F7] text-xs leading-4">{pct}%</span>
-                </div>
-              </div>
-              <span className="uppercase text-[#9A96AD] text-[10px] tracking-wider">{pct}% ready</span>
-            </div>
-          </div>
-
-          {/* asset kit */}
-          <div className="flex flex-col gap-4">
-            <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Asset Kit</span>
-            <div className="grid grid-cols-2 gap-4">
-              {ASSETS.map((a) => (
-                <Card
-                  key={a.label}
-                  onClick={() => go(a.page)}
-                  className={
-                    "rounded-2xl panel card-premium p-4 gap-3 cursor-pointer hover:border-white/20 " +
-                    (a.wide ? "col-span-2" : "")
-                  }
-                >
-                  <div className="rounded-xl bg-[#1E1E28] border-white/8 border-1 border-solid h-28 overflow-hidden">
-                    {a.img ? (
-                      <img src={a.img} alt={`${a.label} preview`} referrerPolicy="no-referrer" className="object-cover w-full h-full" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center font-mono text-[10px] text-[#5E5A72]">
-                        open to create
-                      </div>
-                    )}
+                <div className="flex items-center justify-between px-4 py-3.5">
+                  <div>
+                    <div className="text-[15px] font-semibold text-white">{a.label}</div>
+                    <div className="text-[12px] text-[#8b879a]">{a.sub}</div>
                   </div>
-                  <CardContent className="flex p-0 flex-col gap-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-[#F2F0F7] text-sm leading-5">{a.label}</span>
-                        {a.sub && <span className="text-[#9A96AD] text-xs leading-4">{a.sub}</span>}
-                      </div>
-                      <Chip ok={a.ready} label={a.readyLabel} />
-                    </div>
-                    {a.ai && (
-                      <span className="inline-flex font-medium uppercase rounded-sm bg-[#F0A45B]/10 text-[#F0A45B] text-[9px] tracking-wide px-1.5 py-0.5 w-fit">
-                        AI Generated
-                      </span>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* right rail */}
-        <div className="shrink-0 w-80">
-          <Card className="sticky flex flex-col rounded-2xl panel top-8 p-6 gap-6">
-            <CardHeader className="p-0 gap-3">
-              <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Release</span>
-              <div className="flex flex-col gap-1">
-                <span className="font-bold text-[#F2F0F7] text-3xl leading-9 tracking-tight">
-                  {releaseDate ? fmtDate(releaseDate) : "No date yet"}
-                </span>
-                <span className="font-mono text-[#9A96AD] text-xs leading-4">
-                  {daysToGo !== null ? `${daysToGo} days to go` : "set it on the Release Plan"}
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="flex p-0 flex-col gap-3">
-              <span className="font-medium uppercase text-[#9A96AD] text-xs leading-4 tracking-[2.4px]">Distribution</span>
-              <div className="flex flex-col gap-3">
-                {["Spotify", "Apple Music", "TikTok", "Instagram", "YouTube"].map((p) => {
-                  // "live" only once the release is actually out — no faked
-                  // per-platform status before the distributor pushes it
-                  const ok = linkLive;
-                  return (
-                    <div key={p} className="flex items-center gap-3">
-                      {ok ? (
-                        <div className="size-5 rounded-full bg-[#46E0A8]/15 border-[#46E0A8] border-1 border-solid flex justify-center items-center">
-                          <Check className="size-3 text-[#46E0A8]" />
-                        </div>
-                      ) : (
-                        <div className="size-5 rounded-full border-white/15 border-1 border-solid" />
-                      )}
-                      <span className={(ok ? "text-[#F2F0F7]" : "text-[#9A96AD]") + " text-sm leading-5"}>{p}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <span className="block text-[11px] leading-4 text-[#5E5A72]">
-                {linkLive
-                  ? "Live on all platforms."
-                  : submitted
-                    ? "Submitted to your distributor · live on release day."
-                    : "Not submitted yet."}
-              </span>
-            </CardContent>
-            <CardFooter className="p-0">
-              <Button onClick={() => go("Ship")} className="btn-primary rounded-xl text-white w-full h-11">
-                Review &amp; publish
-              </Button>
-            </CardFooter>
-          </Card>
+                  <ArrowRight className="size-4 text-[#8b879a] transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
