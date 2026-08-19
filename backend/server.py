@@ -87,18 +87,6 @@ class _AuthGate(BaseHTTPMiddleware):
 app.add_middleware(_AuthGate)
 
 
-# Log the exact field that fails request validation (the 422 that never reaches an
-# endpoint body). Temporary diagnostic — surfaces which Form field the browser sent
-# in a shape FastAPI rejects.
-from fastapi.exceptions import RequestValidationError as _RVE
-
-
-@app.exception_handler(_RVE)
-async def _log_validation(request, exc):
-    print("VALIDATION 422", request.url.path, "->", exc.errors(), flush=True)
-    return Response(status_code=422, content=str(exc.errors())[:500].encode(), media_type="text/plain")
-
-
 # ── one heavy job at a time ─────────────────────────────────────────────────
 # The engine is a small shared-CPU box: a single Demucs / Whisper / ffmpeg job
 # already pins both cores, so two heavy jobs at once thrash and crawl (a promo
@@ -689,9 +677,6 @@ def lyric_video(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
-        import traceback
-        print("RENDER FAILED:", repr(e))
-        traceback.print_exc()
         return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
     finally:
         _lv.CLIP_SEC = _prev_clip  # always restore the default clip length
@@ -772,9 +757,6 @@ def promo_clip(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
-        import traceback
-        print("RENDER FAILED:", repr(e))
-        traceback.print_exc()
         return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
     finally:
         for p in ([out] + ([audio_path] if audio_is_temp else [])):

@@ -12,6 +12,7 @@ import {
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DoneToggle from "@/components/DoneToggle";
+import AudioPlayer from "@/components/AudioPlayer";
 import { Textarea } from "@/components/ui/textarea";
 import ProGate from "@/components/ProGate";
 import { useStore } from "@/store";
@@ -336,12 +337,10 @@ export default function App() {
               {trackUrl && (
                 <div className="panel rounded-3xl p-5 flex flex-col gap-3">
                   <span className="section-label">Pick your section (optional)</span>
-                  <audio
-                    ref={trackRef}
-                    controls
+                  <AudioPlayer
                     src={trackUrl}
+                    elRef={trackRef}
                     onLoadedMetadata={(e) => setTrackDur((e.target as HTMLAudioElement).duration || 0)}
-                    className="w-full h-9"
                   />
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
@@ -399,7 +398,7 @@ export default function App() {
                   </div>
                 )}
                 {hookAudioUrl && (
-                  <audio controls src={hookAudioUrl} className="w-full h-9" />
+                  <AudioPlayer src={hookAudioUrl} />
                 )}
                 {detectErr && <span className="text-sm text-[#F0A45B]">{detectErr}</span>}
 
