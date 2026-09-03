@@ -31,6 +31,30 @@ app.add_middleware(
     expose_headers=["X-Gen-Source"],
 )
 
+# ── Per-request access log ──────────────────────────────────────────────────
+# Observability for prod: method, path, status, latency, and which image
+# provider served (X-Gen-Source). No bodies, tokens, or PII are logged. Fly
+# captures stdout, so `fly logs -a rollout-engine` gives latency + error rates.
+import logging as _logging
+_logging.basicConfig(level=_logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+_access = _logging.getLogger("rollout.access")
+
+@app.middleware("http")
+async def _log_requests(request, call_next):
+    _t0 = _time.time()
+    try:
+        resp = await call_next(request)
+    except Exception:
+        _access.exception("%s %s -> 500 unhandled %.0fms",
+                          request.method, request.url.path, (_time.time() - _t0) * 1000)
+        raise
+    _dt = (_time.time() - _t0) * 1000
+    _src = resp.headers.get("X-Gen-Source", "")
+    _access.info("%s %s -> %s %.0fms%s",
+                 request.method, request.url.path, resp.status_code, _dt,
+                 f" via={_src}" if _src else "")
+    return resp
+
 
 # ── Supabase auth gate ──────────────────────────────────────────────────────
 # The engine does heavy ML compute, so it must not be an open endpoint anyone
@@ -67,6 +91,45 @@ def _token_valid(tok: str) -> bool:
     except Exception:
         return False
     return False
+
+
+_plan_cache: dict = {}  # token -> (epoch, plan, is_admin)
+
+
+def _user_plan(tok: str):
+    """The caller's (plan, is_admin) from rollout_artists, read via RLS with the
+    caller's own token (they can only see their own row). Fails SAFE — defaults
+    to ('free', False) if unknown — so a paid feature is never granted on error.
+    Cached 60s per token like the auth check."""
+    now = _time.time()
+    c = _plan_cache.get(tok)
+    if c and c[0] > now:
+        return c[1], c[2]
+    plan, admin = "free", False
+    if _AUTH_ENABLED and tok:
+        try:
+            req = urllib.request.Request(
+                f"{_AUTH_URL}/rest/v1/rollout_artists?select=plan,is_admin",
+                headers={"Authorization": f"Bearer {tok}", "apikey": _AUTH_ANON,
+                         "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=6) as r:
+                import json as _json
+                rows = _json.loads(r.read() or b"[]")
+                if rows:
+                    plan = rows[0].get("plan") or "free"
+                    admin = bool(rows[0].get("is_admin"))
+        except Exception:
+            pass
+    _plan_cache[tok] = (now + 60, plan, admin)
+    return plan, admin
+
+
+def _is_studio(authorization: str) -> bool:
+    """True if the caller is Studio-tier or admin — the gate for 25s clips."""
+    tok = authorization[7:].strip() if authorization[:7].lower() == "bearer " else ""
+    plan, admin = _user_plan(tok)
+    return admin or plan == "studio"
 
 
 class _AuthGate(BaseHTTPMiddleware):
@@ -202,7 +265,7 @@ def upscale(req: UpscaleReq):
             return Response(status_code=400, content=b"provide b64 or url", media_type="text/plain")
         img = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception as e:
-        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=400, content=b"invalid image", media_type="text/plain")
     size = max(512, min(int(req.size), 4000))
     img = img.resize((size, size), Image.LANCZOS)
     out = io.BytesIO()
@@ -229,6 +292,14 @@ def artdirect(req: ArtDirectReq):
 def artstyles():
     from artdirection import list_styles
     return {"styles": list_styles()}
+
+
+@app.get("/brollthemes")
+def brollthemes():
+    """The b-roll footage themes an artist can pick for a lyric video. Single
+    source of truth so the picker and the render engine never drift."""
+    from broll import THEMES
+    return {"themes": THEMES}
 
 
 class GenImageReq(BaseModel):
@@ -261,7 +332,7 @@ def genimage(req: GenImageReq):
         try:
             _assert_public_url(req.base_url)
         except Exception as e:
-            return Response(status_code=400, content=(f"bad base_url: {e}")[:200].encode(), media_type="text/plain")
+            return Response(status_code=400, content=b"bad base_url", media_type="text/plain")
 
     if req.provider == "platform":
         # Failover chain: try each configured free/paid source in order, roll to
@@ -291,7 +362,7 @@ def genimage(req: GenImageReq):
                         req.size, req.model, req.base_url, req.image_b64)
         return Response(content=data, media_type="image/png")
     except Exception as e:
-        return Response(status_code=422, content=str(e).encode(),
+        return Response(status_code=422, content=b"image generation failed",
                         media_type="text/plain")
 
 
@@ -359,6 +430,44 @@ def _ensure_audio(file_id: str, audio_key: str, authorization: str):
             pass
 
 
+_audio_own_cache: dict = {}  # (token, audio_key) -> (epoch, bool)
+
+
+def _owns_audio(audio_key: str, authorization: str) -> bool:
+    """True if the caller may read this track object — verified against Supabase
+    Storage with the CALLER'S OWN token, so RLS (owner-scoped folders) is the
+    authority. A definitive 4xx from Storage means "not yours" → deny; a network
+    error is inconclusive → fail OPEN so a transient blip never blocks a real
+    owner (the auth gate + unguessable id still apply). Cached 120s per token."""
+    if not _AUTH_ENABLED:
+        return True  # local dev without auth configured
+    tok = authorization[7:].strip() if authorization[:7].lower() == "bearer " else ""
+    if not tok or not audio_key or not _AUDIO_KEY_RE.match(audio_key):
+        return False
+    now = _time.time()
+    ck = (tok, audio_key)
+    c = _audio_own_cache.get(ck)
+    if c and c[0] > now:
+        return c[1]
+    sup = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    anon = os.environ.get("SUPABASE_ANON_KEY", "")
+    ok = True  # fail-open default (network/config error); flipped to False on a real 4xx
+    if sup:
+        try:
+            rq = urllib.request.Request(
+                f"{sup}/storage/v1/object/info/tracks/{audio_key}",
+                headers={"Authorization": f"Bearer {tok}", "apikey": anon},
+            )
+            with urllib.request.urlopen(rq, timeout=15) as resp:
+                ok = resp.status == 200
+        except urllib.error.HTTPError as e:
+            ok = e.code not in (400, 401, 403, 404)  # a real "no access" → deny
+        except Exception:
+            ok = True  # inconclusive → don't block a legit owner
+    _audio_own_cache[ck] = (now + 120, ok)
+    return ok
+
+
 def _hook_clip_path(file_id: str, start=None):
     """Cut (and cache) a 15s window of an uploaded track. `start` picks a specific
     second to cut from (the artist's chosen section); None auto-finds the hook.
@@ -407,7 +516,7 @@ def detectlyrics(req: DetectReq, authorization: str = Header(default="")):
     try:
         return {"hook_start": hook_start, "words": detect_words(clip)}
     except Exception as e:
-        return Response(status_code=422, content=(f"detection failed: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"detection failed", media_type="text/plain")
 
 
 @app.post("/scanlyrics")
@@ -426,13 +535,16 @@ def scanlyrics(req: DetectReq, authorization: str = Header(default="")):
         from lyricscan import scan_lyrics
         return {"lyrics": scan_lyrics(path)}
     except Exception as e:
-        return Response(status_code=422, content=(f"lyric scan failed: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"lyric scan failed", media_type="text/plain")
 
 
 @app.get("/hookclip/{file_id}")
-def hookclip(file_id: str, start: float = -1):
+def hookclip(file_id: str, start: float = -1, audio_key: str = "", authorization: str = Header(default="")):
     """Serve a 15s window so the artist can listen. `start` picks their chosen
-    section; < 0 serves the auto-detected hook."""
+    section; < 0 serves the auto-detected hook. Ownership is verified against
+    Storage so a known file_id can't be replayed by another account."""
+    if audio_key and not _owns_audio(audio_key, authorization):
+        return Response(status_code=403, content=b"not your track")
     clip, _ = _hook_clip_path(file_id, start if start >= 0 else None)
     if clip is None:
         return Response(status_code=404, content=b"unknown file_id")
@@ -448,6 +560,8 @@ def trackaudio(file_id: str, audio_key: str = "", authorization: str = Header(de
     """Serve the FULL uploaded track so the artist can scrub it and pick the
     section they want. Re-hydrates from durable Storage if the local copy is gone."""
     import mimetypes
+    if audio_key and not _owns_audio(audio_key, authorization):
+        return Response(status_code=403, content=b"not your track")
     _ensure_audio(file_id, audio_key, authorization)
     base = os.path.basename(file_id or "")
     path = os.path.join(UPLOADS, base) if base else ""
@@ -473,7 +587,7 @@ def correctwords(req: CorrectReq):
     try:
         return {"words": correct_words(req.words, req.lyrics)}
     except Exception as e:
-        return Response(status_code=422, content=(f"bad words payload: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"bad words payload", media_type="text/plain")
 
 
 class RemoveBgReq(BaseModel):
@@ -502,14 +616,14 @@ def removebg(req: RemoveBgReq):
             raw = _fetch_url(req.url)
         Image.open(io.BytesIO(raw)).verify()  # reject non-images without loading rembg
     except Exception as e:
-        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=400, content=b"invalid image", media_type="text/plain")
     try:
         from rembg import remove, new_session
         if _REMBG_SESSION is None:
             _REMBG_SESSION = new_session("isnet-general-use")
         out = remove(raw, session=_REMBG_SESSION)
     except Exception as e:
-        return Response(status_code=500, content=(f"background removal failed: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=500, content=b"background removal failed", media_type="text/plain")
     return Response(content=out, media_type="image/png")
 
 
@@ -525,7 +639,7 @@ def photoessence(req: EssenceReq):
     try:
         img = Image.open(io.BytesIO(_b64.b64decode(req.b64))).convert("RGB")
     except Exception as e:
-        return Response(status_code=400, content=(f"invalid image: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=400, content=b"invalid image", media_type="text/plain")
     img.thumbnail((200, 200))
     # dominant colors via adaptive quantization
     pal_img = img.quantize(colors=5, method=Image.Quantize.FASTOCTREE)
@@ -586,6 +700,7 @@ def lyric_video(
     start: float = Form(-1),   # artist-chosen section start (sec); < 0 = auto hook
     duration: float = Form(15),  # clip length; 25 is a Studio-tier upgrade, else 15
     offset: float = Form(0),   # manual timing nudge (sec) for the lyric sync
+    theme: str = Form(""),     # b-roll footage theme (ocean/city/driving/…); "" = auto
     file: UploadFile | None = File(None),
     authorization: str = Header(default=""),
 ):
@@ -639,6 +754,12 @@ def lyric_video(
     if not lyrics.strip() and not words_override:
         return Response(status_code=400, content=b"provide lyrics or detect the words first", media_type="text/plain")
 
+    # Entitlement gate: 25s clips are a Studio-tier feature. A free/artist caller
+    # could POST duration=25 directly to bypass the UI paywall, so verify the
+    # plan server-side and clamp to 15 for anyone who isn't Studio/admin.
+    if duration >= 20 and not _is_studio(authorization):
+        duration = 15.0
+
     # Studio-tier 25s clips: the renderers read lyricvideo.CLIP_SEC (a module
     # global), so override it for THIS render only and restore it in finally.
     # Safe because the single-job lock guarantees no concurrent render sees it.
@@ -668,7 +789,7 @@ def lyric_video(
             # Moving vibe-matched footage background via the ffmpeg renderer. Any
             # failure (no clips, ffmpeg error) safely falls back to the cover render.
             try:
-                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
+                meta = make_lyric_video_broll(audio_path, lyrics, title, artist, out, moods=_moods, style=style, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset, theme=theme)
             except Exception as e:
                 print("b-roll fell back to cover:", e)
                 meta = make_lyric_video(audio_path, lyrics, cover_url, title, artist, out, font=font, position=position, start_override=(start if start >= 0 else None), words_override=words_override, offset=offset)
@@ -677,7 +798,7 @@ def lyric_video(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
-        return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"render failed", media_type="text/plain")
     finally:
         _lv.CLIP_SEC = _prev_clip  # always restore the default clip length
         for p in ([out] + ([audio_path] if audio_is_temp else [])):
@@ -757,7 +878,7 @@ def promo_clip(
         with open(out, "rb") as f:
             data = f.read()
     except Exception as e:
-        return Response(status_code=422, content=(f"render failed: {e}")[:200].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"render failed", media_type="text/plain")
     finally:
         for p in ([out] + ([audio_path] if audio_is_temp else [])):
             try:
@@ -813,7 +934,7 @@ def do_analyze(file: UploadFile = File(...), lyrics: str = Form("")):
     except Exception as e:
         try: os.remove(path)
         except OSError: pass
-        return Response(status_code=422, content=(f"could not read audio: {e}")[:280].encode(), media_type="text/plain")
+        return Response(status_code=422, content=b"could not read audio", media_type="text/plain")
     result["filename"] = file.filename
     result["file_id"] = file_id
     return result
